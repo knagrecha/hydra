@@ -134,8 +134,9 @@ def train_shard(shard, batch_input, device, labels=None, criterion=None, lr=None
 
         with torch.cuda.amp.autocast():
             toy_output = shard.model(toy_input)
-
-        toy_output = scaler.scale(toy_output)
+        
+        if scaler is not None:
+            toy_output = scaler.scale(toy_output)
         torch.autograd.backward(toy_output, batch_input)
         del toy_output
         del batch_input
@@ -149,8 +150,9 @@ def train_shard(shard, batch_input, device, labels=None, criterion=None, lr=None
                 pass_back_gradients = toy_input.grad
                 toy_input.requires_grad_(False)
             # the user will pass in what WAS the input for this stage!
-        scaler.step(optimizer)
-        scaler.update()
+        if scaler is not None:
+            scaler.step(optimizer)
+            scaler.update()
 
 
         if not isinstance(toy_input, torch.Tensor):
