@@ -52,8 +52,9 @@ def train_shard(shard, batch_input, device, labels=None, criterion=None, lr=None
             with torch.cuda.amp.autocast():
                 ns_labels = shard.model(batch_input)
                 loss = criterion(ns_labels, labels)
-
-            loss = scaler.scale(loss)
+            
+            if (scaler is not None):
+                loss = scaler.scale(loss)
 
             loss.backward()
 
@@ -67,9 +68,10 @@ def train_shard(shard, batch_input, device, labels=None, criterion=None, lr=None
                     pass_back_gradients.append(batch_input.grad)
             else:
                 pass_back_gradients = None
-
-            scaler.step(optimizer)
-            scaler.update()
+            
+            if (scaler is not None):
+                scaler.step(optimizer)
+                scaler.update()
             del optimizer
 
 
@@ -84,6 +86,8 @@ def train_shard(shard, batch_input, device, labels=None, criterion=None, lr=None
                     del batch_input[0]
             else:
                 del batch_input
+               
+
             return scaler, pass_back_gradients
 
 
