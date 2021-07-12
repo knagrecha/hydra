@@ -164,55 +164,25 @@ class Model():
         true_layer_index = 0
         shard_idx = 0
         #print("Free memory: " + str(get_free_space()))
+        
+
         while true_layer_index < (len(self.layers)):
+            if not (isinstance(batch, torch.Tensor)):
+                batch = [x.to(device) for x in batch_orig]
+            else:
+                batch = batch.to(device)
+            
+            
             oom = False
             oom_override = False
             #if (self.verbose == 1):
             #    print("Current Memory Free {0} MB\t".format(get_free_space(device_idx)/(1024*1024)))
 
-
-            # TRY ADDING LAYER
-            try:    
-                list_of_layers.append(self.layers[true_layer_index])
-                model = NNContainer(list_of_layers)
-                model.to(device)
-                true_layer_index+=1
-                
-                mem_params = sum([param.nelement()*param.element_size() for param in model.parameters()])
-                mem_bufs = sum([buf.nelement()*buf.element_size() for buf in model.buffers()])
-                mem = mem_params + mem_bufs
-                
-                if (mem > 1073741824):
-                    print("Model size: {}".format(mem))
-                    oom_override = True # ALL devices need to have AT LEAST 1GB available for model caching!
-                    raise Exception()
-                    
-                #print("Layer created.")
-                print([get_free_space(x) for x in available_devices])
-            except Exception as e:
-                if (self.verbose == 1):
-                    print(e)
-                oom = True
-            if (oom):
-                print("Split at layer {}".format(true_layer_index))
-                for p in model.parameters():
-                    if p.grad is not None:
-                        del p.grad  # free some memory
-                #model.layers = None
-                del model
-                del list_of_layers[-1]
-                torch.cuda.empty_cache()
-
-                if (len(list_of_layers) == 0):
-                    raise RuntimeError("Your minimum defined module's size is too large! Try chunking your modules into smaller pieces?")
-
-                model = NNContainer(list_of_layers)
-                model.to(device)
-                oom = False
-                
-            # TRY A FORWARD PASS
             try:
-                out = model(batch)
+                list_of_layers.append(self.layers[true_layer_index])
+                self.layers[true_layer_index] = self.layers[true_layer_index].to(device)
+                out = self.layers[true_layer_index](batch)
+                
                 if not (isinstance(out, torch.Tensor)):
                     grads = []
                     new_out = []
@@ -221,82 +191,49 @@ class Model():
                             grads.append(torch.ones_like(output).to(device))
                             new_out.append(output)
                     if (len(new_out)!= 0):
-                        torch.autograd.backward(new_out, grads)
+                        torch.autograd.backward(new_out, grads, retain_graph = True)
 
                 else:
                     labels = out.detach().clone()
                     criterion = nn.MSELoss()
                     loss = criterion(out, labels)
                     if loss.requires_grad:
-                        loss.backward()
+                        loss.backward(retain_graph = True)
                     model.zero_grad()
 
                     del loss
                     del criterion
                     del labels
-
+                
                 #print("Pass run.")
                 print([get_free_space(x) for x in available_devices])
                 
-
+                # GPU Memory Consumption is complete
+                # if we reach this point we can safely assume the pass is safe. (i.e. batch will soon be replaced by out - why hold onto it?)
+                # so if we DO NOT reach this point, batch is unmodified (i.e. ready for a new pass in a new subset)
+                
+                del batch
+                if not (isinstance(out, torch.Tensor)):
+                    batch = [x.cpu().detach().clone() for x in out]
+                batch = out.cpu().detach().clone()
                 del out
-
-                for p in model.parameters():
-                    if p.grad is not None:
-                        del p.grad  # free some memory
-                gc.collect()
-                torch.cuda.empty_cache()
-                #print("Pass cleanup.")
-                #print([get_free_space(x) for x in available_devices])        
                 
-                #model.layers = None
-                model.cpu()
-                #del model
-                gc.collect()
-                torch.cuda.empty_cache()
                 
-                #print("Model cleanup.")
-                #print([get_free_space(x) for x in available_devices])
-                    
-            # IF NEEDED, ROLLBACK A PASS
+             
             except Exception as e:
-                print(e)
-                print(traceback.format_exc())
+                if (self.verbose == 1):
+                    print(e)
                 oom = True
-            if oom or oom_override:
+                
+            if (oom):
                 print("Split at layer {}".format(true_layer_index))
-                #print("Current Memory Free in FAIL {0} MB\t".format(get_free_space(device_idx)/(1024*1024)))
-
-                for p in model.parameters():
-                    if p.grad is not None:
-                        del p.grad  # free some memory
-                model.cpu()
-                #del model.layers
-                del model
-                del list_of_layers[-1]
+                pioneer_layer = list_of_layers.pop()
+                pioneer_layer = pioneer_layer.cpu()
                 if (len(list_of_layers) == 0):
-                    
-                    raise RuntimeError("Exit")
-                try:
-                    del out
-                except:
-                    pass
-                try:
-                    del loss
-                except:
-                    pass
-                try:
-                    del labels
-                except:
-                    pass
-                try:
-                    del criterion
-                except:
-                    pass
-                gc.collect()
-                torch.cuda.empty_cache()
+                    raise RuntimeError("Your minimum defined module's size is too large! Try chunking your modules into smaller pieces?")
 
-
+                oom = False
+                
                 start_f = timer() # used for scheduler
 
                 model = NNContainer(list_of_layers)
@@ -339,20 +276,9 @@ class Model():
 
 
                 list_of_layers = nn.ModuleList()
+                list_of_layers.append(pioneer_layer)
         
-                if (isinstance(batch, list) or isinstance(batch, tuple)):
-                    batch = [x.cpu() for x in batch]  
-                del batch
-                batch = out.cpu().detach().clone()
-                del out
-                gc.collect()
-                torch.cuda.empty_cache()
-                #print()
-                #print("Split point found! After handling, {0} MB Free.".format(get_free_space() / (1024 * 1024)), end='\r')
-                #print()
-                batch = batch.to(device)
                 #print([get_free_space(x) for x in available_devices])
-
 
         if (len(list_of_layers) > 0):
             
