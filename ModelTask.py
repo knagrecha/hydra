@@ -24,7 +24,7 @@ def get_load_time(shard, a, device):
     torch.cuda.empty_cache()
 
 class ModelTask():
-    def __init__(self, name, model, criterion, dataloader, lr, epochs, global_timer=None):
+    def __init__(self, name, model, criterion, dataloader, lr, epochs, global_timer=None, use_scaler=False):
         self.global_timer = global_timer
         self.name = name
         self.model = model
@@ -43,8 +43,10 @@ class ModelTask():
         self.gradient = None
 
         self.wastage = 0
-        
-        self.scaler = torch.cuda.amp.GradScaler()
+        if (use_scaler):
+            self.scaler = torch.cuda.amp.GradScaler()
+        else:
+            self.scaler = None
         self.label = None
         self.batch_time = 0
         
