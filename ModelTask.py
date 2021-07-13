@@ -52,7 +52,7 @@ class ModelTask():
         
         self.queue_len = 0
         self.curr_cycle = 0
-        
+        self.last_mini_time = 0
         self.list_of_waste = []
       
         self.active_time = 0
@@ -133,6 +133,8 @@ class ModelTask():
             self.my_device = device
             
     def get_new_batch(self):
+        print("Minibatch time taken: {}".format(timer()-self.last_mini_time))
+        
         try:
             batch_full = next(self.dataloader)
         except StopIteration:
@@ -154,8 +156,8 @@ class ModelTask():
         
         self.curr_cycle = 0
         
-        gc.collect()
-
+        
+        self.last_mini_time = timer()
     def get_shard(self):
         shard = self.queue.pop(0)
         if (self.epochs > 1 or self.batches_remaining >= 1):
