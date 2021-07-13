@@ -279,8 +279,6 @@ class Model():
                         del p.grad  # free some memory
                 model.cpu()  # this is an inplace operation
 
-                gc.collect()
-                torch.cuda.empty_cache()
 
                 end_b = timer()
 
@@ -342,17 +340,15 @@ class Model():
             self.b_shards.append(ShardedTask(model, "b", end_b - start_b, shard_idx))
 
             self.total_time = self.total_time + (end_f - start_f) + (end_b - start_b)
+            print("Expected model minibatch time: {}".format(self.total_time))
 
-            gc.collect()
-            torch.cuda.empty_cache()
-            
             self.b_shards.reverse()
             self.b_shards.pop(0)
-        
+            print("Resuming at Memory {}".format([get_free_space(x) for x in available_devices]))
         if (buffer_arr != None):
             print("Clearing out the buffer array.")
             del buffer_arr
             torch.cuda.empty_cache()
-
+            print("Resuming at emory {}".format([get_free_space(x) for x in available_devices]))
 
 
