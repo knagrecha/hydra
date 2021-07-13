@@ -178,7 +178,7 @@ def train_shard(shard, batch_input, device, labels=None, criterion=None, lr=None
 
 
 class ModelOrchestrator():
-    def __init__(self, tasks, cpus):
+    def __init__(self, tasks):
         
         #multiprocessing.set_start_method('spawn', force=True)
 
