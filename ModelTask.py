@@ -1,7 +1,7 @@
 import torch
 import gc
 from timeit import default_timer as timer
-from mptorch.nn.utilities import get_free_space
+from hydra.nn.utilities import get_free_space
 import numpy as np
 from torch import multiprocessing as multiprocessing
 
