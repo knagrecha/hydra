@@ -5,17 +5,17 @@ Prepped for SIGMOD '22. Code is VERY unorganized. Plan to clean it up before ope
 
 Brief overview:
 
--Partitioner is in nn/Model.
+- Partitioner is in nn/Model.
 
--Container for arbitrary sequential execution is in nn/Container.
+- Container for arbitrary sequential execution is in nn/Container.
 
--Sharded-LRTF is in ModelOrchestrator.py
+- Sharded-LRTF is in ModelOrchestrator.py
 
--SHARP is in ModelOrchestrator.py
+- SHARP is in ModelOrchestrator.py
 
--Double-buffering is in ModelOrchestrator.py by use of non-blocking execution
+- Double-buffering is in ModelOrchestrator.py by use of non-blocking execution
 
--Spilling is in ModelOrchestrator.py by use of .cpu() and .to() functions
+- Spilling is in ModelOrchestrator.py by use of .cpu() and .to() functions
 
--ModelTask.py contains ancillary functions and variables critical to execution.
+- ModelTask.py contains ancillary functions and variables critical to execution.
 
