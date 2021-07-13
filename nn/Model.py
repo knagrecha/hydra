@@ -146,7 +146,7 @@ class Model():
         if (buffer != None):
             buffer_arr = torch.zeros((buffer, buffer)).to(device)
         else:
-            buffer_arr = torch.zeros((18000, 18000)).to(device)
+            buffer_arr = torch.zeros((15000, 15000)).to(device)
             print("Buffer Arr created.")
             print([get_free_space(x) for x in available_devices])
             
@@ -159,13 +159,14 @@ class Model():
         print([get_free_space(x) for x in available_devices])
 
         
-        list_of_layers = nn.ModuleList()
+        list_of_layers = []
 
         true_layer_index = 0
         shard_idx = 0
         #print("Free memory: " + str(get_free_space()))
+        sequence_grads = []
+        sequence_outs = []
         
-
         while true_layer_index < (len(self.layers)):
             if not (isinstance(batch, torch.Tensor)):
                 batch = [x.to(device) for x in batch_orig]
@@ -177,11 +178,18 @@ class Model():
             oom_override = False
             #if (self.verbose == 1):
             #    print("Current Memory Free {0} MB\t".format(get_free_space(device_idx)/(1024*1024)))
-
+            
+            
             try:
                 list_of_layers.append(self.layers[true_layer_index])
                 self.layers[true_layer_index] = self.layers[true_layer_index].to(device)
-                out = self.layers[true_layer_index](batch)
+                
+                if (isinstance(batch, tuple) or isinstance(batch, list)):
+                    #print (mod)
+                    out = self.layers[true_layer_index](*batch)
+                else:
+                    out = self.layers[true_layer_index](batch)
+                
                 
                 if not (isinstance(out, torch.Tensor)):
                     grads = []
@@ -192,21 +200,19 @@ class Model():
                             new_out.append(output)
                     if (len(new_out)!= 0):
                         torch.autograd.backward(new_out, grads, retain_graph = True)
+                        self.layers[true_layer_index].zero_grad()
 
                 else:
-                    labels = out.detach().clone()
-                    criterion = nn.MSELoss()
-                    loss = criterion(out, labels)
-                    if loss.requires_grad:
-                        loss.backward(retain_graph = True)
-                    model.zero_grad()
+                    if (out.requires_grad):
+                        grads = []
+                        grads.append(torch.ones_like(out).to(device))
+                        torch.autograd.backward(out, grads, retain_graph = True)
+                        self.layers[true_layer_index].zero_grad()
 
-                    del loss
-                    del criterion
-                    del labels
-                
+                sequence_outs.append(out)
+                #sequence_grads.append(grads)
                 #print("Pass run.")
-                print([get_free_space(x) for x in available_devices])
+                print("Layer Index: {} | Memory {}".format(true_layer_index, [get_free_space(x) for x in available_devices]))
                 
                 # GPU Memory Consumption is complete
                 # if we reach this point we can safely assume the pass is safe. (i.e. batch will soon be replaced by out - why hold onto it?)
@@ -216,31 +222,38 @@ class Model():
                 if not (isinstance(out, torch.Tensor)):
                     batch = [x.cpu().detach().clone() for x in out]
                 batch = out.cpu().detach().clone()
-                del out
-                
+                true_layer_index+=1
                 
              
             except Exception as e:
-                if (self.verbose == 1):
-                    print(e)
+                print(e)
+                traceback.print_exc()
                 oom = True
                 
             if (oom):
+                true_layer_index -=1
                 print("Split at layer {}".format(true_layer_index))
                 pioneer_layer = list_of_layers.pop()
                 pioneer_layer = pioneer_layer.cpu()
                 if (len(list_of_layers) == 0):
                     raise RuntimeError("Your minimum defined module's size is too large! Try chunking your modules into smaller pieces?")
-
-                oom = False
                 
+                
+                del sequence_outs
+                sequence_outs = []
+                
+                oom = False
+                if not (isinstance(batch_orig, torch.Tensor)):
+                    batch_orig = [x.to(device) for x in batch_orig]
+                else:
+                    batch_orig = batch_orig.to(device)
                 start_f = timer() # used for scheduler
 
-                model = NNContainer(list_of_layers)
+                model = NNContainer(nn.ModuleList(list_of_layers))
                 model.to(device)
 
                     
-                out = model(batch)
+                out = model(batch_orig)
                 end_f = timer()
 
                 start_b = timer() # used for scheduler
@@ -250,7 +263,12 @@ class Model():
                 loss = criterion(out, labels)
                 loss.backward()
                 model.zero_grad()
-
+                if not (isinstance(out, torch.Tensor)):
+                    batch_orig = [x.cpu().detach().clone() for x in out]
+                else:
+                    batch_orig = out.cpu().detach().clone()
+                    
+                del out
                 
                 del loss
                 del criterion
@@ -275,18 +293,26 @@ class Model():
                 
 
 
-                list_of_layers = nn.ModuleList()
+                list_of_layers = []
                 list_of_layers.append(pioneer_layer)
+                print("Resuming at {} | Memory {}".format(pioneer_layer, [get_free_space(x) for x in available_devices]))
         
                 #print([get_free_space(x) for x in available_devices])
 
         if (len(list_of_layers) > 0):
+            del sequence_outs
+            sequence_outs = []
+            if not (isinstance(batch_orig, torch.Tensor)):
+                batch_orig = [x.to(device) for x in batch_orig]
+            else:
+                batch_orig = batch_orig.to(device)
             
             start_f = timer() # used for scheduler
             
-            model = NNContainer(list_of_layers)
+            model = NNContainer(nn.ModuleList(list_of_layers))
             model.to(device)
-            out = model(batch)
+            
+            out = model(batch_orig)
             
             end_f = timer()
             self.shard_forward_times.append(end_f-start_f)
