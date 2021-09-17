@@ -25,12 +25,13 @@ Pass any number of tasks to an orchestrator:
 
 Define orchestrator details and start training!
 
-`orchestra.verbose = 1
+``` 
+ orchestra.verbose = 1
  orchestra.buffer = None
 
  orchestra.generate()
  orchestra.train_models()
-`
+```
 ## Limitations
 
 Currently, this system only supports SGD (see hydra/nn/Model.py). However, extending it to support other optimizers
