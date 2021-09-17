@@ -34,12 +34,18 @@ Define orchestrator details and start training!
 ```
 ## Limitations
 
+### Optimizers
 Currently, this system only supports SGD (see hydra/nn/Model.py). However, extending it to support other optimizers
 should not be too difficult, and we plan to implement it ASAP.
 
+
+### Architectures
 Recurrent architectures cannot be trained with Hydra, as we assume the architecture will be trained with a simple forward -> backward approach.
 Residual architectures CAN be trained with Hydra, but must be defined in a way such that residual outputs are passed through intermediate layers
 with an identity function, or else put into a single residual block.
+
+### Multi-node
+The system is implemented for single-node, multi-GPU execution. I have not implemented multi-node execution just yet.
 
 ## NOTE
 
