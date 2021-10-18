@@ -11,26 +11,8 @@ To install Hydra, clone this repo and import it as shown in the example.
 
 ## Usage
 
-The main tools in Hydra are the "Model", "Task", and "Orchestrator". Wrap any model architecture that can run as a sequence (one layer after another), and wrap it in a Model container:
+Much like pipeline parallelism, Hydra targets "sequentially-defined" model architectures.
 
-`model_hydra_0 = Model(model_0)`
-
-Then, pass it to a Task container along with some training info:
-
-`task_0 = ModelTask(model_0, loss_fn, dataloader_0, lr_0, epochs_0)`
-
-Pass any number of tasks to an orchestrator:
-
-`orchestra = ModelOrchestrator([task_0, task_1])`
-
-Define orchestrator details and start training!
-
-``` 
- orchestra.verbose = 1
- orchestra.buffer = None
-
- orchestra.generate()
- orchestra.train_models()
 ```
 ## Limitations
 
