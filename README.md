@@ -63,7 +63,7 @@ If you use this system, please cite the following:
       primaryClass={cs.DC}
 }
 
-@inproceedings{10.1145/3448016.3450571,
+@inproceedings{hydravision,
 author = {Nagrecha, Kabir},
 title = {Model-Parallel Model Selection for Deep Learning Systems},
 year = {2021},
