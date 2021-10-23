@@ -8,29 +8,7 @@ Contact knagrech@ucsd.edu for more info.
 
 To install Hydra, follow the [Installation Guide](https://github.com/knagrecha/hydra/blob/main/INSTALL.md).
 
-## Usage
 
-The main tools in Hydra are the "Model", "Task", and "Orchestrator". Wrap any model architecture that can run as a sequence (one layer after another), and wrap it in a Model container:
-
-`model_hydra_0 = Model(model_0)`
-
-Then, pass it to a Task container along with some training info:
-
-`task_0 = ModelTask(model_0, loss_fn, dataloader_0, lr_0, epochs_0)`
-
-Pass any number of tasks to an orchestrator:
-
-`orchestra = ModelOrchestrator([task_0, task_1])`
-
-Define orchestrator details and start training!
-
-``` 
- orchestra.verbose = 1
- orchestra.buffer = None
-
- orchestra.generate()
- orchestra.train_models()
-```
 ## Limitations
 
 ### Optimizers
