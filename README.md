@@ -6,8 +6,7 @@ Contact knagrech@ucsd.edu for more info.
 
 ## Install
 
-To install Hydra, clone this repo and import it as shown in the example.
-
+To install Hydra, follow the [Installation Guide](https://github.com/knagrecha/hydra/main/INSTALL.md).
 
 ## Usage
 
