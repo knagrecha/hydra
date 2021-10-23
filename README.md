@@ -6,7 +6,7 @@ Contact knagrech@ucsd.edu for more info.
 
 ## Install
 
-To install Hydra, follow the [Installation Guide](https://github.com/knagrecha/hydra/main/INSTALL.md).
+To install Hydra, follow the [Installation Guide](https://github.com/knagrecha/hydra/blob/main/INSTALL.md).
 
 ## Usage
 
