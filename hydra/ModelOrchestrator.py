@@ -186,7 +186,7 @@ def train_shard(shard, batch_input, device, labels=None, criterion=None, lr=None
 
         #shard.model = shard.model.to("cpu", non_blocking=True)
 
-        return scaler, pass_back_gradients, None
+        return scaler, pass_back_gradients, None 
 
 
 
@@ -213,17 +213,17 @@ class ModelOrchestrator():
         self.sleep_event = threading.Event()
         #self.process_pool = multiprocessing.Pool(processes = cpus, maxtasksperchild=1)
         
-        print("Creating Thread pool.")
+        #print("Creating Thread pool.")
         self.thread_pool = concurrent.futures.ThreadPoolExecutor()
-        print("Pool created.")
+        #print("Pool created.")
    
     def setup_all_models(self):
         start = timer()
         for task in self.tasks:
             
             task.setup(self.verbose, self.buffer)
-            print("TASK {} finished setup".format(task.name))
-        print("ALL TASKS SETUP!")
+            #print("TASK {} finished setup".format(task.name))
+        #print("ALL TASKS SETUP!")
 
             
         end = timer()
@@ -279,8 +279,8 @@ class ModelOrchestrator():
             if (chosen_shard.direction == "b" or chosen_shard.idx == len(chosen_task.model.f_shards) - 1):
                 chosen_task.scaler, new_batch, loss = train_shard(chosen_shard, batch, device, labels, criterion, chosen_task.lr, back_input, chosen_task.scaler, optimizer)
 
-                if (loss is not None):
-                    print("{} Loss: {}".format(chosen_task.name, loss))
+                if (loss is not None and self.verbose == 1):
+                    chosen_task.last_loss = loss
 
                 if (new_batch is not None):
                     if (chosen_task not in self.cached_tasks or chosen_task.queue_len == 1):
@@ -369,108 +369,13 @@ class ModelOrchestrator():
         self.active_devices.remove(chosen)
         self.available_devices.append(chosen)
     
-    def bar_gen(self, val_1, val_2):  
-        percent_complete = val_1 / val_2
-        bar_len = curses.COLS - curses.COLS / 10 - 2
-        cols_full = int(percent_complete * bar_len)
-        return "[{}{}]".format(int(cols_full) * '▓', int(bar_len-cols_full)*" ")
-    
-    def gui(self, stscr, dist_between, time, cache_task, cached_device_info, cache_success):
-        stscr.clear()
-        line_across = curses.COLS * "="
-        mini_across = curses.COLS * "-"
-        text = "HYDRA MODEL TRAINER v0.1"
-        stscr.addstr (int(dist_between / 8), int(curses.COLS / 2) - int(len(text) / 2), text, curses.A_STANDOUT)
-        
-        
-        device_string = ", "
-        str_devices = [str(x) for x in self.all_devices]
-        str_free = [str(round(get_used_space(x)/(1024*1024), 2))+"MB" for x in self.all_devices]
-        
-        if (cache_task is not None and cached_device_info is not None):
-            text = " Task {} is cached on device {}. ".format(cache_task.name, cached_device_info)
-            stscr.addstr(int(dist_between / 4), int(curses.COLS / 2) - int(len(text)/2), text)
-        
-        if (not cache_success):
-            text = " Last Cache was a Failure. "
-        else:
-            text = " Last Cache was a Success. "
-            
-        stscr.addstr(int(3 * dist_between / 8), int(curses.COLS / 2) - int(len(text)/2), text)
-        
-        
-        device_string = device_string.join(str_devices)
-        free_string = "\n".join(str_free)
-        text = " Devices {}. ".format(device_string)
-        stscr.addstr(int(dist_between / 2), int(curses.COLS / 2) - int(len(text)/2), text)
-        text = " Device Memory Consumption {} . ".format(str_free)
-        stscr.addstr(5 * int(dist_between / 8), int(curses.COLS / 2) - int(len(text)/2), text)
-
-        
-        text = " {} seconds elapsed. ".format(round(time, 2))
-        stscr.addstr(int(6 * dist_between / 8), int(curses.COLS / 2) - int(len(text)/2), text)
-        
-        stscr.addstr (int(7 * dist_between / 8), 0, line_across)
-
-        
-        for i in range(len(self.tasks)):
-            y_pos = dist_between * (i+1)
-            
-            # task name
-            stscr.addstr(y_pos, int(curses.COLS / 2) - int(len(text) / 2), text, curses.A_BOLD)
-            
-            completed_batches = (self.tasks[i].total_length - self.tasks[i].batches_remaining)
-            
-            completed_epochs = (self.tasks[i].total_epochs - self.tasks[i].epochs)
-            
-            # batch timer
-            text = " {} out of {} shard-passes completed in this batch. ".format(self.tasks[i].curr_cycle, self.tasks[i].queue_len)
-            stscr.addstr(y_pos + int(2 * dist_between / 16), int(curses.COLS / 2) - int(len(text) / 2), text)
-            
-            text = self.bar_gen(self.tasks[i].curr_cycle, self.tasks[i].queue_len)
-            stscr.addstr(y_pos + int(3 * dist_between / 16), int(curses.COLS / 2) - int(len(text) / 2), text)
-            
-            # batch timer
-            text = " {} out of {} batches completed in this epoch. ".format(completed_batches, self.tasks[i].total_length)
-            stscr.addstr(y_pos + int(4 * dist_between / 16), int(curses.COLS / 2) - int(len(text) / 2), text)
-            
-            text = self.bar_gen(completed_batches, self.tasks[i].total_length)
-            stscr.addstr(y_pos + int(5 * dist_between / 16), int(curses.COLS / 2) - int(len(text) / 2), text)
-                        
-            # epoch timer
-            text = " {} out of {} epochs completed.  ".format(completed_epochs, self.tasks[i].total_epochs)
-            stscr.addstr(y_pos + int(7 * dist_between / 16), int(curses.COLS / 2) - int(len(text) / 2), text)
-            
-            text = self.bar_gen(completed_epochs, self.tasks[i].total_epochs)
-            stscr.addstr(y_pos + int(8 * dist_between / 16), int(curses.COLS / 2) - int(len(text) / 2), text)
-            
-            max_time_remaining = (self.tasks[i].model.total_time + self.tasks[i].batch_time) * (self.tasks[i].batches_remaining + 1) * self.tasks[i].epochs
-            # estimator
-            text = "Estimated remaining time: {}s ".format(max_time_remaining)
-            stscr.addstr(y_pos + int(9 * dist_between / 16), int(curses.COLS / 2) - int(len(text) / 2), text)
-            text = "Elapsed active time: {}s. Last shard-pass took {}s".format(self.tasks[i].active_time, self.tasks[i].wastage)
-            stscr.addstr(y_pos + int(11 * dist_between / 16), int(curses.COLS / 2) - int(len(text) / 2), text)
-            
-            
-            stscr.addstr(y_pos+int(3 * dist_between / 4), 0, mini_across)
-
-
-        
-        stscr.addstr(curses.LINES - 2, 0, line_across)
-        stscr.refresh()
-
-    def train_models(self, gui=False):
+   
+    def train_models(self):
         print("TRAINING STARTS")
-
+        
         ctr = 0
         
 
-        if gui:
-            stscr = curses.initscr()
-            curses.echo()
-            window = curses.newwin(curses.LINES, curses.COLS, 0, 0)
-
-            dist_between = int(curses.LINES / (len(self.tasks) + 1))
 
         old_time = 0
 
@@ -501,7 +406,7 @@ class ModelOrchestrator():
             chosen_shard = chosen_task.get_shard()
             
             self.idle_tasks.remove(chosen_task)
-            print("Training task {}".format(chosen_task.name))
+            #print("Training task {}".format(chosen_task.name))
             self.thread_pool.submit(self.train_shard_on_device, chosen_task, chosen_shard, chosen_device)
         #print(self.active_devices)
 
@@ -542,6 +447,15 @@ class ModelOrchestrator():
             #ctr+=1
             #if (timer() - old_time > 0.5):        
             #    print  ([ task for task in self.active_tasks])
+            
+            
+            str_builder = "====== | "
+            for task in self.tasks:
+                str_builder+=(task.name + ": {} / {} minibatches complete, last runtime: {:.2f}, last loss: {:.2f} | ".format( task.total_length - task.batches_remaining, task.total_length, task.last_runtime, task.last_loss))
+            print(str_builder+"======", end='\r', flush=True)
+                              
+            
+            
             try:
                 self.sleep_event.wait()
                 self.sleep_event.clear()
@@ -563,7 +477,7 @@ class ModelOrchestrator():
                             chosen_shard = chosen_task.get_shard()
                             running_tasks[chosen_device] = chosen_task
                             temp_active.append(chosen_device)
-                            print("Training {} on {}".format(chosen_task.name, chosen_device))
+                            #print("Training {} on {}".format(chosen_task.name, chosen_device))
                             self.thread_pool.submit(self.train_shard_on_device, chosen_task, chosen_shard, chosen_device)
 
                     # recalculate cached shards
@@ -633,20 +547,11 @@ class ModelOrchestrator():
                 end = timer()
                 print("TOTAL TIME TAKEN: {}".format(end - start))
 
-                if (gui):
-                    stscr.clear()
-                    curses.nocbreak()
-                    stscr.keypad(False)
-                    curses.echo()
-                    curses.endwin()
+                
                 sys.exit(0)
 
             
      
         end = timer()
         print("TOTAL TIME TAKEN: {}".format(end - start))
-        if (gui):
-            curses.nocbreak()
-            stscr.keypad(False)
-            curses.echo()
-            curses.endwin()
+        

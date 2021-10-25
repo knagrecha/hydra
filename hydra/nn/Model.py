@@ -59,7 +59,6 @@ class Model():
         
         for shard_starts in range(len(indices) - 1):
             list_of_layers = self.layers[indices[shard_starts]:indices[shard_starts+1]]
-            print("Layers {} to {}".format(indices[shard_starts], indices[shard_starts+1]))
             start_f = timer()
             model = NNContainer(list_of_layers)
             if (isinstance(batch, list) or isinstance(batch, tuple)):
@@ -73,7 +72,6 @@ class Model():
             labels = out.detach().clone()
             criterion = nn.MSELoss()
             loss = criterion(out, labels)
-            print("loss")
             if loss.requires_grad:
                 loss.backward()
                 model.zero_grad()
@@ -97,8 +95,6 @@ class Model():
             self.b_shards.append(ShardedTask(model, "b", end_b - start_b, shard_idx))
             self.total_time = self.total_time + (end_f - start_f) + (end_b - start_b)
             shard_idx+=1
-            
-        print("Layers {} to {}".format(indices[-1], len(self.layers)-1))
         list_of_layers = self.layers[indices[-1]:]
         start_f = timer()
         model = NNContainer(list_of_layers)
@@ -151,24 +147,16 @@ class Model():
         
         device_idx = np.argmin(free_spaces)
         device = torch.device("cuda:"+str(device_idx))
-        if (self.verbose == 1):
-            print(free_spaces)
-            print("Experimental sharding will occur on device {}.".format(device_idx))
-    
+
         if (buffer != None):
             buffer_arr = torch.zeros((buffer, buffer)).to(device)
         else:
             buffer_arr = torch.zeros((15000, 15000)).to(device)
-            print("Buffer Arr created.")
-            print([get_free_space(x) for x in available_devices])
-            
+
         true_labels = batch_orig[-1]
         batch_orig = batch_orig[0:len(batch_orig)-1]
         
         batch = [x.to(device) for x in batch_orig]
-        
-        print("Batch Transferred.")
-        print([get_free_space(x) for x in available_devices])
 
         
         list_of_layers = []
@@ -178,7 +166,8 @@ class Model():
         #print("Free memory: " + str(get_free_space()))
         sequence_grads = []
         sequence_outs = []
-        
+        split_indices = []
+        print("======================Partitioning======================")
         while true_layer_index < (len(self.layers)):
             if not (isinstance(batch, torch.Tensor)):
                 batch = [x.to(device) for x in batch_orig]
@@ -209,7 +198,7 @@ class Model():
 
                     sequence_outs = []
 
-                    print("Post-clearing | Memory {}".format([get_free_space(x) for x in available_devices]))
+           
 
                     if not (isinstance(batch_orig, torch.Tensor)):
                         batch_orig = [x.to(device) for x in batch_orig]
@@ -222,7 +211,7 @@ class Model():
                     model.to(device)
 
                     out = model(batch_orig)
-                    print("Post-pass | Memory {}".format([get_free_space(x) for x in available_devices]))
+
                     end_f = timer()
                     self.shard_forward_times.append(end_f-start_f)
 
@@ -236,7 +225,7 @@ class Model():
 
                     loss = true_criterion(out, true_labels)
                     loss.backward()
-                    print("Post-back | Memory {}".format([get_free_space(x) for x in available_devices]))
+
                     model.zero_grad()
                     del loss
                     del true_criterion
@@ -253,17 +242,14 @@ class Model():
                     self.b_shards.append(ShardedTask(model, "b", end_b - start_b, shard_idx))
 
                     self.total_time = self.total_time + (end_f - start_f) + (end_b - start_b)
-                    print("Expected model minibatch time: {}".format(self.total_time))
 
                     self.b_shards.reverse()
                     self.b_shards.pop(0)
                     
                     if (buffer_arr != None):
-                        print("Clearing out the buffer array.")
                         del buffer_arr
                         torch.cuda.empty_cache()
   
-                    print("Resuming at Memory {}".format([get_free_space(x) for x in available_devices]))
                     true_layer_index+=1
                 else:
                 
@@ -289,8 +275,7 @@ class Model():
 
                     sequence_outs.append(out)
                     #sequence_grads.append(grads)
-                    print("Pass run.")
-                    print("Layer Index: {} | Memory {}".format(true_layer_index, [get_free_space(x) for x in available_devices]))
+                    print("| Splits: {} | Layer Index: {} | Memory {} |".format(split_indices, true_layer_index, [get_free_space(x) for x in available_devices]), end='\r', flush=True)
 
                     # GPU Memory Consumption is complete
                     # if we reach this point we can safely assume the pass is safe. (i.e. batch will soon be replaced by out - why hold onto it?)
@@ -304,13 +289,13 @@ class Model():
                     true_layer_index+=1
 
             except Exception as e:
-                print(e)
-                traceback.print_exc()
+                #print(e)
+                #traceback.print_exc()
                 oom = True
 
             if (oom):
                 true_layer_index -=1
-                print("Split at layer {}".format(true_layer_index))
+                split_indices.append(true_layer_index)
                 pioneer_layer = list_of_layers.pop()
                 pioneer_layer = pioneer_layer.cpu()
                 if (len(list_of_layers) == 0):
@@ -371,7 +356,8 @@ class Model():
 
                 list_of_layers = []
                 list_of_layers.append(pioneer_layer)
-                print("Resuming at {} | Memory {}".format(pioneer_layer, [get_free_space(x) for x in available_devices]))
+        print()
+        print("=======Anticipated Minibatch Times: {:.2f}s=======".format(self.total_time))
 
                 #print([get_free_space(x) for x in available_devices])
 

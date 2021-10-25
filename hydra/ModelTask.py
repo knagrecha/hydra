@@ -55,6 +55,8 @@ class ModelTask():
         self.batches_remaining = len(dataloader)
         self.saved_inter_output = []
         self.gradient = None
+        
+        
 
         self.wastage = 0
         if (use_scaler):
@@ -67,6 +69,8 @@ class ModelTask():
         self.queue_len = 0
         self.curr_cycle = 0
         self.last_mini_time = 0
+        self.last_runtime = 0
+        self.last_loss = 0
         self.list_of_waste = []
       
         self.active_time = 0
@@ -147,7 +151,7 @@ class ModelTask():
             self.my_device = device
             
     def get_new_batch(self):
-        print("Minibatch time taken: {}".format(timer()-self.last_mini_time))
+        self.last_runtime = timer()-self.last_mini_time
         
         try:
             batch_full = next(self.dataloader)
