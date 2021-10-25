@@ -28,7 +28,7 @@ import concurrent.futures
 import sys
 import signal
 from torch import multiprocessing
-
+import traceback
 global_timer = timer()
 thread_lock = threading.Lock()
 
@@ -186,7 +186,7 @@ def train_shard(shard, batch_input, device, labels=None, criterion=None, lr=None
 
         #shard.model = shard.model.to("cpu", non_blocking=True)
 
-        return scaler, pass_back_gradients, _
+        return scaler, pass_back_gradients, None
 
 
 
@@ -244,119 +244,123 @@ class ModelOrchestrator():
     """
 
     def train_shard_on_device(self, chosen_task, chosen_shard, chosen):
-        #print("starting train for {}".format(chosen_task.name))
-        profile_timer_start = timer()
-        device = torch.device("cuda:{0}".format(chosen))
-        if chosen_shard.idx == 0:
+        try:
+            #print("starting train for {}".format(chosen_task.name))
+            profile_timer_start = timer()
+            device = torch.device("cuda:{0}".format(chosen))
+            if chosen_shard.idx == 0:
+                if chosen_shard.direction == "f":
+                    #print("Getting new batch for {}, {} batches remaining".format(chosen_task.name, chosen_task.batches_remaining))
+                    chosen_task.get_new_batch()
+
+
+
+            # defining the parameters
+            criterion, back_input, batch, labels, optimizer = None, None, None, None, None
+
+            # if its a forward pass, the batch is the latest item in the intermediate outputs
             if chosen_shard.direction == "f":
-                #print("Getting new batch for {}, {} batches remaining".format(chosen_task.name, chosen_task.batches_remaining))
-                chosen_task.get_new_batch()
+                batch = chosen_task.saved_inter_output[-1]
 
-
-
-        # defining the parameters
-        criterion, back_input, batch, labels, optimizer = None, None, None, None, None
-
-        # if its a forward pass, the batch is the latest item in the intermediate outputs
-        if chosen_shard.direction == "f":
-            batch = chosen_task.saved_inter_output[-1]
-
-            # if its the last forward pass (and hence the first backward pass), also send a label and criterion.
-            if chosen_shard.idx == len(chosen_task.model.f_shards)- 1:
-                labels = chosen_task.label
-                criterion = chosen_task.criterion
+                # if its the last forward pass (and hence the first backward pass), also send a label and criterion.
+                if chosen_shard.idx == len(chosen_task.model.f_shards)- 1:
+                    labels = chosen_task.label
+                    criterion = chosen_task.criterion
+                    optimizer = chosen_shard.optimizer
+            else:
+                batch = chosen_task.gradient
+                back_input = chosen_task.saved_inter_output[-1]
                 optimizer = chosen_shard.optimizer
-        else:
-            batch = chosen_task.gradient
-            back_input = chosen_task.saved_inter_output[-1]
-            optimizer = chosen_shard.optimizer
 
 
 
-        start = timer()
+            start = timer()
 
-        if (chosen_shard.direction == "b" or chosen_shard.idx == len(chosen_task.model.f_shards) - 1):
-            chosen_task.scaler, new_batch, _ = train_shard(chosen_shard, batch, device, labels, criterion, chosen_task.lr, back_input, chosen_task.scaler, optimizer)
-            
-            if (_ is not None):
-                self.log("Loss: {}".format(_))
+            if (chosen_shard.direction == "b" or chosen_shard.idx == len(chosen_task.model.f_shards) - 1):
+                chosen_task.scaler, new_batch, loss = train_shard(chosen_shard, batch, device, labels, criterion, chosen_task.lr, back_input, chosen_task.scaler, optimizer)
 
-            if (new_batch is not None):
+                if (loss is not None):
+                    print("{} Loss: {}".format(chosen_task.name, loss))
+
+                if (new_batch is not None):
+                    if (chosen_task not in self.cached_tasks or chosen_task.queue_len == 1):
+
+                        if not isinstance(new_batch, torch.Tensor):
+                            new_batch = [i.to("cpu", non_blocking=True) for i in new_batch]
+                        else:
+                            new_batch = new_batch.to("cpu", non_blocking=True)
+
+
+            # FORWARD
+            else:
+                new_batch = train_shard(chosen_shard, batch, device, labels, criterion, chosen_task.lr, back_input, chosen_task.scaler)
                 if (chosen_task not in self.cached_tasks or chosen_task.queue_len == 1):
-
                     if not isinstance(new_batch, torch.Tensor):
-                        new_batch = [i.to("cpu", non_blocking=True) for i in new_batch]
+                        new_batch = [i.detach().to("cpu", non_blocking=True) for i in new_batch]
                     else:
-                        new_batch = new_batch.to("cpu", non_blocking=True)
-
-
-        # FORWARD
-        else:
-            new_batch = train_shard(chosen_shard, batch, device, labels, criterion, chosen_task.lr, back_input, chosen_task.scaler)
-            if (chosen_task not in self.cached_tasks or chosen_task.queue_len == 1):
-                if not isinstance(new_batch, torch.Tensor):
-                    new_batch = [i.detach().to("cpu", non_blocking=True) for i in new_batch]
+                        new_batch = new_batch.detach().to("cpu", non_blocking=True)
                 else:
-                    new_batch = new_batch.detach().to("cpu", non_blocking=True)
-            else:
-                if not isinstance(new_batch, torch.Tensor):
-                    new_batch = [i.detach_() for i in new_batch]
+                    if not isinstance(new_batch, torch.Tensor):
+                        new_batch = [i.detach_() for i in new_batch]
+                    else:
+                        new_batch = new_batch.detach_()
+            if (chosen_task not in self.cached_tasks or chosen_task.queue_len > 1):
+                chosen_shard.model = chosen_shard.model.to("cpu", non_blocking=True)
+
+
+            #print("Train for {} completed.".format(chosen_task.name))
+            end = timer()
+            chosen_task.wastage = end - start
+
+
+            #print("Batch transfers")
+            if new_batch is not None:
+                if isinstance(new_batch, torch.Tensor):
+                    my_batch = new_batch.cpu()
                 else:
-                    new_batch = new_batch.detach_()
-        if (chosen_task not in self.cached_tasks or chosen_task.queue_len > 1):
-            chosen_shard.model = chosen_shard.model.to("cpu", non_blocking=True)
-
-
-        #print("Train for {} completed.".format(chosen_task.name))
-        end = timer()
-        chosen_task.wastage = end - start
-
-
-        #print("Batch transfers")
-        if new_batch is not None:
-            if isinstance(new_batch, torch.Tensor):
-                my_batch = new_batch.cpu()
+                    #print(new_batch)
+                    my_batch = [x.cpu() for x in new_batch]
+                del new_batch
             else:
-                #print(new_batch)
-                my_batch = [x.cpu() for x in new_batch]
-            del new_batch
-        else:
-            my_batch = None
+                my_batch = None
 
-        l_f = False
-        if chosen_shard.idx == len(chosen_task.model.f_shards)- 1 and chosen_shard.direction == "f":
-            l_f = True
+            l_f = False
+            if chosen_shard.idx == len(chosen_task.model.f_shards)- 1 and chosen_shard.direction == "f":
+                l_f = True
 
-        # if backward pass, update the gradient
-        if chosen_shard.direction == "b" or l_f:
-            #print("Handling backward gradients")
-            chosen_task.gradient = my_batch
-            chosen_task.saved_inter_output.pop()
+            # if backward pass, update the gradient
+            if chosen_shard.direction == "b" or l_f:
+                #print("Handling backward gradients")
+                chosen_task.gradient = my_batch
+                chosen_task.saved_inter_output.pop()
 
-        # if forward, prep it for next pass.
-        else:
-            chosen_task.saved_inter_output.append(my_batch)
+            # if forward, prep it for next pass.
+            else:
+                chosen_task.saved_inter_output.append(my_batch)
 
-        #thread_lock.acquire()
-        if len(chosen_task.queue) == 0:
-            #print("TASK FULLY COMPLETE")
-            self.tasks.remove(chosen_task)
-            self.log("Task {} has completely finished at time {}.".format(chosen_task.name, timer()-global_timer))
-            chosen_task.cleanup() # remove for production
-        else:
-            chosen_task.clear_settings()
-            self.idle_tasks.append(chosen_task)
+            #thread_lock.acquire()
+            if len(chosen_task.queue) == 0:
+                #print("TASK FULLY COMPLETE")
+                self.tasks.remove(chosen_task)
+                #self.log("Task {} has completely finished at time {}.".format(chosen_task.name, timer()-global_timer))
+                chosen_task.cleanup() # remove for production
+            else:
+                chosen_task.clear_settings()
+                self.idle_tasks.append(chosen_task)
 
-        #print("Task {} has finished at time {}.".format(chosen_task.name, timer()-global_timer))
-        self.unlock_device(chosen)
-        self.active_tasks.remove(chosen_task)
+            #print("Task {} has finished at time {}.".format(chosen_task.name, timer()-global_timer))
+            self.unlock_device(chosen)
+            self.active_tasks.remove(chosen_task)
 
-        profile_timer_end = timer()
+            profile_timer_end = timer()
 
-        chosen_shard.time_cost = profile_timer_end - profile_timer_start - (end - start) # time for process running, assuming model is on device.
-        #thread_lock.release()
-        self.sleep_event.set()
-
+            chosen_shard.time_cost = profile_timer_end - profile_timer_start - (end - start) # time for process running, assuming model is on device.
+            #thread_lock.release()
+            self.sleep_event.set()
+        except Exception as e:
+            traceback.print_exc()
+            print(e)
+            
     def lock_device(self, chosen):
         self.active_devices.append(chosen)
         self.available_devices.remove(chosen)

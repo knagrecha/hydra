@@ -13,6 +13,21 @@
 # ==============================================================================
 
 
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
+
 import hydra
 from hydra.nn import Model
 from hydra import ModelTask, ModelOrchestrator
@@ -111,73 +126,6 @@ def main():
 
     model_0 = torch.nn.Sequential(
 
-        custom.BertEmbedding(28783, 768, transpose=False),
-        
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        
-                custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-
-        torch.nn.Linear(768, 768),
-        torch.nn.GELU(),
-        torch.nn.LayerNorm(768, eps=1e-12),
-        torch.nn.Linear(768, 28783)
-
     )
 
     params = sum(p.numel() for p in model_0.parameters())
@@ -218,3 +166,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
