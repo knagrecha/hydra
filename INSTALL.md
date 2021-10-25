@@ -19,7 +19,7 @@ Run `pip install -r requirements.txt`, then `pip install .`.
 ## Running
 ---
 
-The files `examples/single-task-lm.py` and `examples/multi-task-lm.py` demonstrate how to setup a simple training job. Essentially, you need to define your dataloaders and model through the standard PyTorch APIs, then pass the objects into Hydra's wrappers as follows:
+The files `examples/single-task-lm.py` and `examples/multi-task-lm.py` demonstrate how to setup a simple training job. A vocab file for BERT is also included. Essentially, you need to define your dataloaders and model through the standard PyTorch APIs, then pass the objects into Hydra's wrappers as follows:
 
     model_hydra_0 = Model(model_0) # Call Hydra Model Wrapper
     dataloader_0 = get_data_loader_train(32) # Generate dataloader

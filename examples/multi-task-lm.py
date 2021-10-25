@@ -21,6 +21,7 @@ import torch
 from torchtext.experimental.datasets import WikiText2
 from torch.utils.data import DataLoader
 from os import path
+from timeit import timeit as timer
 
 """
     Preprocessing functions for the dataloaders.
@@ -132,7 +133,7 @@ def main():
 
     )
 
-    params = sum(p.numel() for p in my_model.parameters())
+    params = sum(p.numel() for p in model_0.parameters())
     print("Total parameters: {}".format(params))
 
 
