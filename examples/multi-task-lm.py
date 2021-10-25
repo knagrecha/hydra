@@ -22,9 +22,9 @@ from torchtext.experimental.datasets import WikiText2
 from torch.utils.data import DataLoader
 from os import path
 
-""""
+"""
     Preprocessing functions for the dataloaders.
-""""
+"""
 def process_raw_data(raw_data, batch_size, bptt):
     _num = raw_data.size(0) // (batch_size * bptt)
     raw_data = raw_data[:(_num * batch_size * bptt)]
