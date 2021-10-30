@@ -35,7 +35,7 @@ thread_lock = threading.Lock()
 
 
 
-def train_shard(shard, batch_input, device, labels=None, criterion=None, lr=None, back_input=None, scaler=None, optimizer = None):
+def train_shard(shard, batch_input, device, labels=None, criterion=None, lr=None, back_input=None, scaler=None):
 
     if shard.direction == "f":
         old = next(shard.model.parameters()).device
@@ -48,7 +48,7 @@ def train_shard(shard, batch_input, device, labels=None, criterion=None, lr=None
 
         if labels != None:
             shard.model.zero_grad()  # zeroes the gradient buffers of all parameters
-            optimizer.zero_grad()  # zero the gradient buffers
+            shard.optimizer.zero_grad()  # zero the gradient buffers
             if not isinstance(labels, torch.Tensor):
                 labels = [x.to(device, non_blocking=True) for x in labels]
             else:
@@ -83,9 +83,12 @@ def train_shard(shard, batch_input, device, labels=None, criterion=None, lr=None
                 pass_back_gradients = None
             
             if (scaler is not None):
-                scaler.step(optimizer)
+                scaler.step(shard.optimizer)
                 scaler.update()
-            del optimizer
+            else:
+                shard.optimizer.step()
+                shard.optimizer.zero_grad()
+           
 
 
             shard.model.zero_grad()
@@ -126,7 +129,7 @@ def train_shard(shard, batch_input, device, labels=None, criterion=None, lr=None
 
         shard.model.to(device, non_blocking=True)
         shard.model.zero_grad()  # zeroes the gradient buffers of all parameters
-        optimizer.zero_grad()  # zero the gradient buffers
+        shard.optimizer.zero_grad()  # zero the gradient buffers
 
         if not isinstance(back_input, torch.Tensor):
             #print("Back input is a list")
@@ -168,8 +171,11 @@ def train_shard(shard, batch_input, device, labels=None, criterion=None, lr=None
                 toy_input.requires_grad_(False)
             # the user will pass in what WAS the input for this stage!
         if scaler is not None:
-            scaler.step(optimizer)
+            scaler.step(shard.optimizer)
             scaler.update()
+        else:
+            shard.optimizer.step()
+            shard.optimizer.zero_grad()
 
 
         if not isinstance(toy_input, torch.Tensor):
@@ -179,7 +185,7 @@ def train_shard(shard, batch_input, device, labels=None, criterion=None, lr=None
         else:
             del toy_input
 
-        del optimizer
+        
 
         shard.model.zero_grad()
         #print("This [TRAIN STEP] took {} seconds".format(timer()-st))
@@ -256,7 +262,7 @@ class ModelOrchestrator():
 
 
             # defining the parameters
-            criterion, back_input, batch, labels, optimizer = None, None, None, None, None
+            criterion, back_input, batch, labels = None, None, None, None
 
             # if its a forward pass, the batch is the latest item in the intermediate outputs
             if chosen_shard.direction == "f":
@@ -266,18 +272,16 @@ class ModelOrchestrator():
                 if chosen_shard.idx == len(chosen_task.model.f_shards)- 1:
                     labels = chosen_task.label
                     criterion = chosen_task.criterion
-                    optimizer = chosen_shard.optimizer
             else:
                 batch = chosen_task.gradient
                 back_input = chosen_task.saved_inter_output[-1]
-                optimizer = chosen_shard.optimizer
 
 
 
             start = timer()
 
             if (chosen_shard.direction == "b" or chosen_shard.idx == len(chosen_task.model.f_shards) - 1):
-                chosen_task.scaler, new_batch, loss = train_shard(chosen_shard, batch, device, labels, criterion, chosen_task.lr, back_input, chosen_task.scaler, optimizer)
+                chosen_task.scaler, new_batch, loss = train_shard(chosen_shard, batch, device, labels, criterion, chosen_task.lr, back_input, chosen_task.scaler)
 
                 if (loss is not None and self.verbose == 1):
                     chosen_task.last_loss = loss
@@ -451,7 +455,7 @@ class ModelOrchestrator():
             
             str_builder = "====== | "
             for task in self.tasks:
-                str_builder+=(task.name + ": {} / {} minibatches complete, last runtime: {:.2f}, last loss: {:.2f} | ".format( task.total_length - task.batches_remaining, task.total_length, task.last_runtime, task.last_loss))
+                str_builder+=(task.name + ": Epoch {}, {} / {} minibatches complete, last runtime: {:.2f}, last loss: {:.2f} | ".format( task.total_epochs - task.epochs, task.total_length - task.batches_remaining, task.total_length, task.last_runtime, task.last_loss))
             print(str_builder+"======", end='\r', flush=True)
                               
             
@@ -545,6 +549,8 @@ class ModelOrchestrator():
 
                 print ("Caught KeyboardInterrupt, terminating workers")
                 end = timer()
+                print()
+                print()
                 print("TOTAL TIME TAKEN: {}".format(end - start))
 
                 

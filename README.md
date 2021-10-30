@@ -9,6 +9,35 @@ Contact knagrech@ucsd.edu for more info.
 To install Hydra, follow the [Installation Guide](https://github.com/knagrecha/hydra/blob/main/INSTALL.md).
 
 
+
+## Running
+---
+
+The files `examples/single-task-lm.py` and `examples/multi-task-lm.py` demonstrate how to setup a simple training job. A vocab file for BERT is also included. 
+
+To use the system, first define your model and dataloaders using standard PyTorch APIs. Specification is easiest using PyTorch's `nn.Sequential` wrapper, but any module will do so long as the layers are listed in the order you wish them to execute.
+
+Once the dataloader and model is defined, you can pass them into Hydra's wrappers as follows:
+
+    model_hydra_0 = Model(model_0) # Call Hydra Model Wrapper
+    dataloader_0 = get_data_loader_train(32) # Generate dataloader
+    
+    model_hydra_0 = Model(model_1)
+    dataloader_1 = get_data_loader_train(32)
+    
+    task_0 = ModelTask(model_0, loss_fn, dataloader_0, lr_0, epochs_0)
+    task_1 = ModelTask(model_1, loss_fn, dataloader_1, lr_1, epochs_1)
+
+
+    # create orchestrator
+    orchestra = ModelOrchestrator([task_0, task_1])
+    orchestra.verbose = 1
+    orchestra.buffer = None
+
+    orchestra.generate()
+    orchestra.train_models()
+
+
 ## Limitations
 
 ### Optimizers

@@ -110,7 +110,7 @@ class ModelTask():
     def setup(self, verbose, buffer):
         if (not self.setup_complete):
             self.model.verbose = verbose
-            self.model.setup(self.criterion, next(self.dataloader), buffer)
+            self.model.setup(self.criterion, next(self.dataloader), buffer, self.lr)
         
         
         start = timer()
@@ -159,15 +159,12 @@ class ModelTask():
             del self.dataloader
             
             self.epochs -= 1
-            print("Task {} finished an epoch, {} remaining".format(self.name, self.epochs))
+            #print("Task {} finished an epoch, {} remaining".format(self.name, self.epochs))
             self.dataloader = iter(self._old_data)
             self.batches_remaining = len(self._old_data)
             batch_full = next(self.dataloader)
 
         self.batches_remaining -= 1
-        
-        if ((self.total_length / self.batches_remaining) % 5 == 0):
-            print ("[Task {}: {} / {} batches complete]".format(self.name, self.total_length - self.batches_remaining, self.total_length))
         
         self.saved_inter_output.append(batch_full[0:len(batch_full)-1])
         self.label = batch_full[-1]

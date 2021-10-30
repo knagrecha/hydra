@@ -101,6 +101,8 @@ def get_data_loader_train(b_size):
                                 collate_fn=lambda b: collate_batch(b, b_size, mask_frac, mask_id, cls_id), drop_last=True)
 
 
+
+
 """
     Main function
 """
@@ -143,7 +145,7 @@ def main():
         custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
         custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
         
-                custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
         custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
         custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
         custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
@@ -185,6 +187,7 @@ def main():
 
 
     model_1 = copy.deepcopy(model_0)
+    model_2 = copy.deepcopy(model_0)
 
     model_hydra_0 = Model(model_0) # Call Hydra Model Wrapper
     dataloader_0 = get_data_loader_train(32) # Generate dataloader
@@ -192,18 +195,24 @@ def main():
     model_hydra_1 = Model(model_1)
     dataloader_1 = get_data_loader_train(32)
     
+    model_hydra_2 = Model(model_2)
+    dataloader_2 = get_data_loader_train(64)
+    
     lr_0 = 0.01
     lr_1 = 0.001
+    lr_2 = 0.001
     
     epochs_0 = 2
     epochs_1 = 4
+    epochs_2 = 8
     
     task_0 = ModelTask("Model 0", model_hydra_0, pretraining_loss, dataloader_0, lr_0, epochs_0)
     task_1 = ModelTask("Model 1", model_hydra_1, pretraining_loss, dataloader_1, lr_1, epochs_1)
+    task_2 = ModelTask("Model 2", model_hydra_2, pretraining_loss, dataloader_2, lr_2, epochs_2)
 
 
     # create orchestrator
-    orchestra = ModelOrchestrator([task_0, task_1])
+    orchestra = ModelOrchestrator([task_0, task_1, task_2])
     orchestra.verbose = 1
 
     """
