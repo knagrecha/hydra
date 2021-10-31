@@ -220,7 +220,7 @@ def main():
     (suggested, 1000, 2000). The buffer value is used to create a
     buffer x buffer sized tensor to maintain space during partitioning.
     """
-    orchestra.buffer = None
+    orchestra.buffer = 1000
 
     orchestra.generate()
     orchestra.train_models()
