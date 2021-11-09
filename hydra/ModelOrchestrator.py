@@ -18,7 +18,7 @@ import torch.optim as optim
 import threading
 import gc
 from timeit import default_timer as timer
-from hydra.nn.utilities import get_free_space, get_used_space
+from hydra.utilities import get_free_space, get_used_space
 import math
 #import curses
 import numpy as np
@@ -269,7 +269,7 @@ class ModelOrchestrator():
                 batch = chosen_task.saved_inter_output[-1]
 
                 # if its the last forward pass (and hence the first backward pass), also send a label and criterion.
-                if chosen_shard.idx == len(chosen_task.model.f_shards)- 1:
+                if chosen_shard.idx == len(chosen_task.forward_shards)- 1:
                     labels = chosen_task.label
                     criterion = chosen_task.criterion
             else:
@@ -280,7 +280,7 @@ class ModelOrchestrator():
 
             start = timer()
 
-            if (chosen_shard.direction == "b" or chosen_shard.idx == len(chosen_task.model.f_shards) - 1):
+            if (chosen_shard.direction == "b" or chosen_shard.idx == len(chosen_task.forward_shards) - 1):
                 chosen_task.scaler, new_batch, loss = train_shard(chosen_shard, batch, device, labels, criterion, chosen_task.lr, back_input, chosen_task.scaler)
 
                 if (loss is not None and self.verbose == 1):
@@ -329,7 +329,7 @@ class ModelOrchestrator():
                 my_batch = None
 
             l_f = False
-            if chosen_shard.idx == len(chosen_task.model.f_shards)- 1 and chosen_shard.direction == "f":
+            if chosen_shard.idx == len(chosen_task.forward_shards)- 1 and chosen_shard.direction == "f":
                 l_f = True
 
             # if backward pass, update the gradient
@@ -400,7 +400,7 @@ class ModelOrchestrator():
         
         
         for chosen_device in self.all_devices:
-            task_times = [(i.model.total_time * i.batches_remaining) + i.total_length * i.model.total_time * i.epochs for i in self.idle_tasks]
+            task_times = [(i.total_time * i.batches_remaining) + i.total_length * i.total_time * i.epochs for i in self.idle_tasks]
             chosen_task = self.idle_tasks[np.argmax(task_times)]
 
             self.lock_device(chosen_device)
@@ -428,7 +428,7 @@ class ModelOrchestrator():
                 #print("Considering {}".format(considerables))
                 for i in considerables:
                     if (len(i.queue) > 0):
-                        task_time = (i.model.total_time * i.batches_remaining ) + i.total_length * i.model.total_time * i.epochs
+                        task_time = (i.total_time * i.batches_remaining ) + i.total_length * i.total_time * i.epochs
                         if task_time > lrt:
                             lrt = task_time
                             cache_task = i
@@ -503,7 +503,7 @@ class ModelOrchestrator():
                         for i in cache_possibles:
                             #print(len(i.queue))
                             if (len(i.queue) > 0):
-                                task_time = (i.model.total_time * i.batches_remaining ) + i.total_length * i.model.total_time * i.epochs
+                                task_time = (i.total_time * i.batches_remaining ) + i.total_length * i.total_time * i.epochs
                                 if task_time > lrt:
                                     lrt = task_time
                                     cache_task = i
@@ -529,7 +529,7 @@ class ModelOrchestrator():
                         #print(self.idle_tasks)
                         if (len(self.idle_tasks) != 0):
                             for i in self.idle_tasks:
-                                task_time = (i.model.total_time * i.batches_remaining) + i.total_length * i.model.total_time * i.epochs
+                                task_time = (i.total_time * i.batches_remaining) + i.total_length * i.total_time * i.epochs
                                 if task_time > lrt:
                                     lrt = task_time
                                     chosen_task = i

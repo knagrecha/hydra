@@ -15,10 +15,10 @@
 import torch
 import gc
 from timeit import default_timer as timer
-from hydra.nn.utilities import get_free_space
+from hydra.utilities import get_free_space
 import numpy as np
 from torch import multiprocessing as multiprocessing
-
+from hydra.components.partitioner import Pilot
 
 
 def get_load_time(shard, a, device):
@@ -38,10 +38,16 @@ def get_load_time(shard, a, device):
     torch.cuda.empty_cache()
 
 class ModelTask():
-    def __init__(self, name, model, criterion, dataloader, lr, epochs, global_timer=None, use_scaler=False):
+    def __init__(self, name, model, criterion, dataloader, lr, epochs, global_timer=None, use_scaler=False, partitioner=Pilot()):
         self.global_timer = global_timer
         self.name = name
         self.model = model
+        self.forward_shards = []
+        self.backward_shards = []
+        
+        self.partitioner = partitioner
+        
+        
         self.lr = lr
         self.total_epochs = epochs
         self.epochs = epochs
@@ -77,6 +83,7 @@ class ModelTask():
         self.my_device = None
         self.anticipated_curr_shard_time = 0
         self.setup_complete = False
+        self.total_time = 0
 
     def clear(self):
         del self._old_data
@@ -85,10 +92,8 @@ class ModelTask():
         del self.label
         
     def cleanup(self):
-        for shard in self.model.f_shards:
+        for shard in self.forward_shards:
             del shard
-        del self.model.layers
-        del self.model
         while(len(self.saved_inter_output) > 0):
             del self.saved_inter_output[0]
         del self.dataloader
@@ -103,15 +108,20 @@ class ModelTask():
     def clear_settings(self):
         self.anticipated_curr_shard_time = 0
         
-    def manual_setup(self, split_indices):
-        self.model.setup_manual(self.criterion, next(self.dataloader), split_indices)
-        self.setup_complete = True
+   
         
     def setup(self, verbose, buffer):
-        if (not self.setup_complete):
-            self.model.verbose = verbose
-            self.model.setup(self.criterion, next(self.dataloader), buffer, self.lr)
         
+        self.forward_shards, self.backward_shards, self.total_time = self.partitioner.shard(
+                                                                        self.model, self.criterion, 
+                                                                        next(self.dataloader), 
+                                                                        buffer, 
+                                                                        self.lr, 
+                                                                        verbose
+                                                                        )
+        
+        self.queue.extend(self.forward_shards)
+        self.queue.extend(self.backward_shards)
         
         start = timer()
         self.dataloader = iter(self._old_data)
@@ -126,9 +136,7 @@ class ModelTask():
         free_spaces = [get_free_space(x) for x in available_devices]
         device_idx = np.argmin(free_spaces)
         device = torch.device("cuda:"+str(device_idx))
-    
-        self.queue.extend(self.model.f_shards)
-        self.queue.extend(self.model.b_shards)
+   
 
         for shard in self.queue:
             torch.cuda.empty_cache()
@@ -143,7 +151,6 @@ class ModelTask():
     def setup_timing(self, device):
         
         if (next(self.queue[0].model.parameters()).device == torch.device(device)):
-            #print(next(self.queue[0].model.parameters()).device)
             self.anticipated_curr_shard_time = timer() - self.global_timer + self.queue[0].time_cost
             self.my_device = device
         else:
@@ -159,7 +166,6 @@ class ModelTask():
             del self.dataloader
             
             self.epochs -= 1
-            #print("Task {} finished an epoch, {} remaining".format(self.name, self.epochs))
             self.dataloader = iter(self._old_data)
             self.batches_remaining = len(self._old_data)
             batch_full = next(self.dataloader)

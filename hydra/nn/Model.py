@@ -12,26 +12,14 @@
 # ==============================================================================
 
 import torch.nn as nn
-from .utilities import get_free_space
+from hydra.utilities import get_free_space
 import numpy as np
 import gc
 from timeit import default_timer as timer
 
 import torch
-from .Container import NNContainer
+from hydra.components.partitioner.containers import ShardModel, ShardedTask
 import traceback
-
-
-
-class ShardedTask():
-
-    def __init__(self, model, direction, time_taken, idx, lr):
-        self.lr = lr
-        self.model = model
-        self.direction = direction
-        self.time_cost = time_taken
-        self.idx = idx
-        self.optimizer = torch.optim.SGD(self.model.parameters(), lr = self.lr)
 
 
 

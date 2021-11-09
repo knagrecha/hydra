@@ -12,23 +12,30 @@
 # ==============================================================================
 
 import torch.nn as nn
-from .utilities import get_free_space
+from hydra.utilities import get_free_space
 
 import gc
 
 import torch
-class NNContainer(nn.Module):
+
+"""
+    This is the PyTorch module that wraps model layers to form a model shard.
+    It runs a simple pass through the layers in sequence.
+
+"""
+
+
+class ShardModel(nn.Module):
     def __init__(self, layers):
 
-        super(NNContainer, self).__init__()
+        super(ShardModel, self).__init__()
         
         for idx, layer in enumerate(layers):
             self.add_module("Module_{}".format(idx), layer)
 
     def forward(self, x):
         for idx, mod in enumerate(self.children()):
-            #print("IDX: {}, MODULE: {}".format(idx, mod))
-            if not (isinstance(mod, NNContainer)):
+            if not (isinstance(mod, ShardModel)):
                 if (isinstance(x, tuple) or isinstance(x, list)):
                     #print (mod)
                     x = mod(*x)
