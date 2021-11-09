@@ -20,6 +20,10 @@ Every module is a class with the following attributes:
 - type (a simple name for the class)
 - index (reference to the shard's index)
 
+It must also have a function "run". The run function signature depends on the module type you are implementing.
+
+---
+
 ### Forward Module
 
 The forward module must support the following inputs (in order):
