@@ -34,168 +34,6 @@ thread_lock = threading.Lock()
 
 
 
-
-def train_shard(shard, batch_input, device, labels=None, criterion=None, lr=None, back_input=None, scaler=None):
-
-    if shard.direction == "f":
-        old = next(shard.model.parameters()).device
-        shard.model.to(device, non_blocking=True)
-
-        if not isinstance(batch_input, torch.Tensor):
-            batch_input = [x.to(device, non_blocking=True) for x in batch_input]
-        else:
-            batch_input = batch_input.to(device, non_blocking=True)
-
-        if labels != None:
-            shard.model.zero_grad()  # zeroes the gradient buffers of all parameters
-            shard.optimizer.zero_grad()  # zero the gradient buffers
-            if not isinstance(labels, torch.Tensor):
-                labels = [x.to(device, non_blocking=True) for x in labels]
-            else:
-                labels = labels.to(device, non_blocking=True)
-
-            if (shard.idx != 0):
-                if not isinstance(batch_input, torch.Tensor):
-                    for batch in batch_input:
-                        batch.requires_grad_(True)
-                else:
-                    batch_input.requires_grad_(True)
-
-
-            with torch.cuda.amp.autocast():
-                ns_labels = shard.model(batch_input)
-                loss = criterion(ns_labels, labels)
-            
-            if (scaler is not None):
-                loss = scaler.scale(loss)
-
-            loss.backward()
-
-
-            pass_back_gradients = []
-            if (shard.idx != 0):
-                # pass_back_gradients are on device
-                if not isinstance(batch_input, torch.Tensor):
-                    pass_back_gradients = [ batch.grad for batch in batch_input ]
-                else:
-                    pass_back_gradients.append(batch_input.grad)
-            else:
-                pass_back_gradients = None
-            
-            if (scaler is not None):
-                scaler.step(shard.optimizer)
-                scaler.update()
-            else:
-                shard.optimizer.step()
-                shard.optimizer.zero_grad()
-           
-
-
-            shard.model.zero_grad()
-
-            #shard_model = shard.model.to("cpu", non_blocking=True)
-
-            del labels
-
-            if not isinstance(batch_input, torch.Tensor):
-                while (len(batch_input) > 0):
-                    del batch_input[0]
-            else:
-                del batch_input
-               
-
-            return scaler, pass_back_gradients, loss.item()
-
-
-
-        else:
-
-            with torch.no_grad() and torch.cuda.amp.autocast():
-                ns_labels = shard.model(batch_input)
-
-            #shard_model = shard.model.to("cpu", non_blocking=True)
-
-            if not isinstance(batch_input, torch.Tensor):
-                while (len(batch_input) > 0):
-                    del batch_input[0]
-                del batch_input
-            else:
-                del batch_input
-            return ns_labels
-
-
-    # backpropagation
-    else:
-
-        shard.model.to(device, non_blocking=True)
-        shard.model.zero_grad()  # zeroes the gradient buffers of all parameters
-        shard.optimizer.zero_grad()  # zero the gradient buffers
-
-        if not isinstance(back_input, torch.Tensor):
-            #print("Back input is a list")
-            toy_input = [x.to(device, non_blocking=True) for x in back_input]
-
-            if (shard.idx != 0):
-                for m_input in toy_input:
-                    #print(m_input)
-                    if isinstance(m_input, torch.Tensor):
-                        m_input.requires_grad_(True)
-
-        else:
-            toy_input = back_input.to(device, non_blocking=True)
-            if (shard.idx != 0):
-                toy_input.requires_grad_(True)     
-
-        if not isinstance(batch_input, torch.Tensor):
-            batch_input = [x.to(device, non_blocking=True) for x in batch_input]
-        else:
-            batch_input = batch_input.to(device, non_blocking=True) 
-
-
-        with torch.cuda.amp.autocast():
-            toy_output = shard.model(toy_input)
-        
-        if scaler is not None:
-            toy_output = scaler.scale(toy_output)
-        torch.autograd.backward(toy_output, batch_input)
-        del toy_output
-        del batch_input
-        pass_back_gradients = None
-        if shard.idx != 0: # the first backwards pass need not compute back pass gradients.
-            if (not isinstance(toy_input, torch.Tensor)):
-                pass_back_gradients = [i.grad for i in toy_input]
-                for m_input in toy_input:
-                    m_input.requires_grad_(False)
-            else:
-                pass_back_gradients = toy_input.grad
-                toy_input.requires_grad_(False)
-            # the user will pass in what WAS the input for this stage!
-        if scaler is not None:
-            scaler.step(shard.optimizer)
-            scaler.update()
-        else:
-            shard.optimizer.step()
-            shard.optimizer.zero_grad()
-
-
-        if not isinstance(toy_input, torch.Tensor):
-            while (len(toy_input) > 0):
-                del toy_input[0]
-            del toy_input
-        else:
-            del toy_input
-
-        
-
-        shard.model.zero_grad()
-        #print("This [TRAIN STEP] took {} seconds".format(timer()-st))
-
-        #shard.model = shard.model.to("cpu", non_blocking=True)
-
-        return scaler, pass_back_gradients, None 
-
-
-
 class ModelOrchestrator():
     def __init__(self, tasks):
         
@@ -251,82 +89,50 @@ class ModelOrchestrator():
 
     def train_shard_on_device(self, chosen_task, chosen_shard, chosen):
         try:
-            #print("starting train for {}".format(chosen_task.name))
             profile_timer_start = timer()
             device = torch.device("cuda:{0}".format(chosen))
             if chosen_shard.idx == 0:
                 if chosen_shard.direction == "f":
-                    #print("Getting new batch for {}, {} batches remaining".format(chosen_task.name, chosen_task.batches_remaining))
                     chosen_task.get_new_batch()
-
-
 
             # defining the parameters
             criterion, back_input, batch, labels = None, None, None, None
 
-            # if its a forward pass, the batch is the latest item in the intermediate outputs
+            # FORWARD PASS
             if chosen_shard.direction == "f":
                 batch = chosen_task.saved_inter_output[-1]
-
-                # if its the last forward pass (and hence the first backward pass), also send a label and criterion.
+                
+                # FINAL FORWARD
                 if chosen_shard.idx == len(chosen_task.forward_shards)- 1:
-                    labels = chosen_task.label
-                    criterion = chosen_task.criterion
-            else:
-                batch = chosen_task.gradient
-                back_input = chosen_task.saved_inter_output[-1]
-
-
-
-            start = timer()
-
-            if (chosen_shard.direction == "b" or chosen_shard.idx == len(chosen_task.forward_shards) - 1):
-                chosen_task.scaler, new_batch, loss = train_shard(chosen_shard, batch, device, labels, criterion, chosen_task.lr, back_input, chosen_task.scaler)
-
-                if (loss is not None and self.verbose == 1):
-                    chosen_task.last_loss = loss
-
-                if (new_batch is not None):
-                    if (chosen_task not in self.cached_tasks or chosen_task.queue_len == 1):
-
-                        if not isinstance(new_batch, torch.Tensor):
-                            new_batch = [i.to("cpu", non_blocking=True) for i in new_batch]
-                        else:
-                            new_batch = new_batch.to("cpu", non_blocking=True)
-
-
-            # FORWARD
-            else:
-                new_batch = train_shard(chosen_shard, batch, device, labels, criterion, chosen_task.lr, back_input, chosen_task.scaler)
-                if (chosen_task not in self.cached_tasks or chosen_task.queue_len == 1):
-                    if not isinstance(new_batch, torch.Tensor):
-                        new_batch = [i.detach().to("cpu", non_blocking=True) for i in new_batch]
-                    else:
-                        new_batch = new_batch.detach().to("cpu", non_blocking=True)
+                    arg_list = [batch, chosen_task.label, chosen_task.criterion, device, chosen_task.scaler]
+                    chosen_task.scaler, new_batch, chosen_task.last_loss = chosen_shard.run(arg_list)
+                # REGULAR FORWARD
                 else:
+                    arg_list = [batch, device]
+                    new_batch = chosen_shard.run(arg_list)
+                    
+                    # Detach data for forward passes. Back and final return list-type gradients which don't need
+                    # to be detached anyway.
                     if not isinstance(new_batch, torch.Tensor):
                         new_batch = [i.detach_() for i in new_batch]
                     else:
-                        new_batch = new_batch.detach_()
+                        new_batch = new_batch.detach()
+            # BACKWARD PASS       
+            else:
+                batch = chosen_task.gradient
+                back_input = chosen_task.saved_inter_output[-1]
+                arg_list = [batch, labels, criterion, device, chosen_task.scaler, back_input]
+                chosen_task.scaler, new_batch = chosen_shard.run(arg_list)
+
+            # Hold in place if possible
+            if (new_batch is not None):
+                if (chosen_task not in self.cached_tasks or chosen_task.queue_len == 1):
+                    new_batch = move_batch_to_device(new_batch, "cpu")
+               
+            my_batch = new_batch
+
             if (chosen_task not in self.cached_tasks or chosen_task.queue_len > 1):
                 chosen_shard.model = chosen_shard.model.to("cpu", non_blocking=True)
-
-
-            #print("Train for {} completed.".format(chosen_task.name))
-            end = timer()
-            chosen_task.wastage = end - start
-
-
-            #print("Batch transfers")
-            if new_batch is not None:
-                if isinstance(new_batch, torch.Tensor):
-                    my_batch = new_batch.cpu()
-                else:
-                    #print(new_batch)
-                    my_batch = [x.cpu() for x in new_batch]
-                del new_batch
-            else:
-                my_batch = None
 
             l_f = False
             if chosen_shard.idx == len(chosen_task.forward_shards)- 1 and chosen_shard.direction == "f":
@@ -334,7 +140,6 @@ class ModelOrchestrator():
 
             # if backward pass, update the gradient
             if chosen_shard.direction == "b" or l_f:
-                #print("Handling backward gradients")
                 chosen_task.gradient = my_batch
                 chosen_task.saved_inter_output.pop()
 
@@ -358,7 +163,7 @@ class ModelOrchestrator():
 
             profile_timer_end = timer()
 
-            chosen_shard.time_cost = profile_timer_end - profile_timer_start - (end - start) # time for process running, assuming model is on device.
+            chosen_shard.time_cost = profile_timer_end - profile_timer_start # time for process running, assuming model is on device.
             #thread_lock.release()
             self.sleep_event.set()
         except Exception as e:

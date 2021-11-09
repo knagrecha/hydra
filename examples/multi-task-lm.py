@@ -14,7 +14,6 @@
 
 
 import hydra
-from hydra.nn import Model
 from hydra import ModelTask, ModelOrchestrator
 import customLayers as custom
 import copy

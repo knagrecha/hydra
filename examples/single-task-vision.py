@@ -29,7 +29,6 @@
 
 
 import hydra
-from hydra.nn import Model
 from hydra import ModelTask, ModelOrchestrator
 import customLayers as custom
 import copy
@@ -128,13 +127,12 @@ def main():
 
     params = sum(p.numel() for p in fashionCNN.parameters())
     print("Total parameters: {}".format(params))
-    test(fashionCNN)
-    model_hydra_0 = Model(fashionCNN) # Call Hydra Model Wrapper
+    #test(fashionCNN)
     lr_0 = 0.01
     
     epochs_0 = 10
     
-    task_0 = ModelTask("Model 0", model_hydra_0, nn.CrossEntropyLoss(), train_dataloader, lr_0, epochs_0)
+    task_0 = ModelTask("Model 0", fashionCNN, nn.CrossEntropyLoss(), train_dataloader, lr_0, epochs_0)
 
 
     # create orchestrator
@@ -142,19 +140,14 @@ def main():
     orchestra.verbose = 1
 
     """
-     Buffer space for safety. If you get OOMs, add some buffer space
-    (suggested, 1000, 2000). The buffer value is used to create a
-    buffer x buffer sized tensor to maintain space during partitioning.
+     Double-Buffer size.
     """
-    orchestra.buffer = None
+    orchestra.buffer = 2000
 
     orchestra.generate()
     orchestra.train_models()
     test(fashionCNN)
 if __name__ == "__main__":
-    #for i in range(2):
-    #    test(fashionCNN)
-    #    train(fashionCNN)
-    #test(fashionCNN)
+
     main()
 

@@ -28,10 +28,17 @@ import torch
 
 class ShardedTask():
 
-    def __init__(self, model, direction, time_taken, idx, lr):
+    def __init__(self, model, executor, direction, time_taken, idx, lr, *args):
         self.lr = lr
         self.model = model
         self.direction = direction
         self.time_cost = time_taken
         self.idx = idx
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr = self.lr)
+        self.executor = executor
+    
+    def run(self, arg_list):
+        if self.executor.type != "Forward":
+            return self.executor.run(self.model, self.optimizer, *arg_list)
+        else:
+            return self.executor.run(self.model, *arg_list)

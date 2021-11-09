@@ -36,6 +36,18 @@ def get_used_space(idx=0):
 
 """
 
+def delete_batch(batch):
+    if not isinstance(batch, torch.Tensor):
+        while (len(batch) > 0):
+            del batch[0]
+    else:
+        del batch
+
+"""
+    Handles device movement with awareness of data type.
+
+"""
+
 def move_batch_to_device(batch, device):
     if not (isinstance(batch, torch.Tensor)):
         return [x.to(device, non_blocking=True) for x in batch]

@@ -62,9 +62,7 @@ class ModelTask():
         self.saved_inter_output = []
         self.gradient = None
         
-        
 
-        self.wastage = 0
         if (use_scaler):
             self.scaler = torch.cuda.amp.GradScaler()
         else:

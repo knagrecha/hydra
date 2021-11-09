@@ -20,6 +20,8 @@ import torch
 from hydra.components.partitioner.containers import ShardModel, ShardedTask
 import traceback
 
+from hydra.components.executor import Forward, ForwardLoss, Backward
+
 import math
 
 class Pilot():
@@ -229,9 +231,8 @@ class Pilot():
                 
            
                 
-
-                forward_shards.append(ShardedTask(model, "f", end_f-start_f, shard_count, lr))
-                backward_shards.append(ShardedTask(model, "b", end_b-start_b, shard_count, lr))
+                forward_shards.append(ShardedTask(model, Forward(shard_count), "f", end_f-start_f, shard_count, lr))
+                backward_shards.append(ShardedTask(model, Backward(shard_count), "b", end_b-start_b, shard_count, lr))
                 shard_count+=1
 
                 total_time = total_time + (end_f - start_f) + (end_b - start_b)
@@ -262,12 +263,8 @@ class Pilot():
 
             start_b = timer() # used for scheduler
             
-            #true_labels = move_batch_to_device(true_labels, self.selected_device)
-            
             true_labels = torch.ones_like(out)
             torch.autograd.backward(out, true_labels)
-            #loss = criterion(out, true_labels)
-            #loss.backward()
             model.zero_grad()
             
             #del loss
@@ -279,22 +276,25 @@ class Pilot():
 
             model.cpu()  # this is an inplace operation
             end_b = timer()
-            
-            
-            forward_shards.append(ShardedTask(model, "f", end_f - start_f, shard_count, lr))
-            backward_shards.append(ShardedTask(model, "b", end_b - start_b, shard_count, lr))
+
+            forward_shards.append(ShardedTask(model, ForwardLoss(shard_count), "f", end_f - start_f, shard_count, lr) )
+            backward_shards.append(ShardedTask(model, Backward(shard_count), "b", end_b - start_b, shard_count, lr ))
 
             total_time = total_time + (end_f - start_f) + (end_b - start_b)
 
-            backward_shards.reverse()
-            backward_shards.pop(0) # The forward and backward shards share their last and first shards respectively, only need 1
-
-            if (double_buffer != 0):
-                del buffer_space
-                torch.cuda.empty_cache()
+            
         if verbose == 1:
             print()
             print("=======Anticipated Minibatch Times: {:.2f}s=======".format(total_time))
+            
+        backward_shards.reverse()
+        backward_shards.pop(0) # The forward and backward shards share their last and first shards respectively, only need 1
+
+        if (double_buffer != 0):
+            del buffer_space
+            torch.cuda.empty_cache()
+        if (forward_shards[-1].executor.type != "Forward Loss"):
+            forward_shards[-1].executor = ForwardLoss(shard_count)
             
         return forward_shards, backward_shards, total_time
 
