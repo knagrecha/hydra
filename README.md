@@ -13,7 +13,7 @@ To install Hydra, follow the [Installation Guide](https://github.com/knagrecha/h
 ## Running
 ---
 
-The files `examples/single-task-lm.py` and `examples/multi-task-lm.py` demonstrate how to setup a simple training job. A vocab file for BERT is also included. 
+The files `examples/single-task-vision.py` and `examples/multi-task-lm.py` demonstrate how to setup a simple training job. A vocab file for BERT and a vision benchmark dataset are also included. 
 
 To use the system, first define your model and dataloaders using standard PyTorch APIs. Specification is easiest using PyTorch's `nn.Sequential` wrapper, but any module will do so long as the layers are listed in the order you wish them to execute.
 
