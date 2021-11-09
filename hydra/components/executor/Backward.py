@@ -1,12 +1,31 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 from hydra.utilities import delete_batch, move_batch_to_device
 import torch
+
+"""
+    Generic Backward Pass module. Any back-pass module
+    must support these inputs (they can be discarded if unnecessary)
+    and return a scaler (can be None), and gradients.
+"""
 
 class Backward():
     def __init__(self, idx):
         self.type="Backward"
         self.idx = idx
 
-    def run(self, model, optimizer, batch_input, labels, criterion, device, scaler, back_input):
+    def run(self, model, optimizer, batch_input, device, back_input, scaler=None):
         
         model.to(device, non_blocking=True)
         model.zero_grad()  # zeroes the gradient buffers of all parameters

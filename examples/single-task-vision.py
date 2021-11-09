@@ -127,7 +127,7 @@ def main():
 
     params = sum(p.numel() for p in fashionCNN.parameters())
     print("Total parameters: {}".format(params))
-    #test(fashionCNN)
+    test(fashionCNN)
     lr_0 = 0.01
     
     epochs_0 = 10

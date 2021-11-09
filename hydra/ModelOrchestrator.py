@@ -121,7 +121,7 @@ class ModelOrchestrator():
             else:
                 batch = chosen_task.gradient
                 back_input = chosen_task.saved_inter_output[-1]
-                arg_list = [batch, labels, criterion, device, chosen_task.scaler, back_input]
+                arg_list = [batch, device, back_input, chosen_task.scaler]
                 chosen_task.scaler, new_batch = chosen_shard.run(arg_list)
 
             # Hold in place if possible
