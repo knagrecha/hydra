@@ -155,6 +155,25 @@ def main():
         custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
         custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
         
+        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
+        
+        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
+        
+        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
+        
+        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
 
         torch.nn.Linear(768, 768),
         torch.nn.GELU(),
@@ -168,39 +187,40 @@ def main():
 
 
     model_1 = copy.deepcopy(model_0)
-    #model_2 = copy.deepcopy(model_0)
+    model_2 = copy.deepcopy(model_0)
 
     model_hydra_0 = Model(model_0) # Call Hydra Model Wrapper
-    dataloader_0 = get_data_loader_train(128) # Generate dataloader
+    dataloader_0 = get_data_loader_train(32) # Generate dataloader
     
     model_hydra_1 = Model(model_1)
-    dataloader_1 = get_data_loader_train(128)
+    dataloader_1 = get_data_loader_train(32)
     
-    #model_hydra_2 = Model(model_2)
-    #dataloader_2 = get_data_loader_train(64)
+    model_hydra_2 = Model(model_2)
+    dataloader_2 = get_data_loader_train(64)
     
     lr_0 = 0.01
     lr_1 = 0.001
-    #lr_2 = 0.001
+    lr_2 = 0.001
     
     epochs_0 = 2
     epochs_1 = 4
-    #epochs_2 = 8
+    epochs_2 = 8
     
     task_0 = ModelTask("Model 0", model_hydra_0, pretraining_loss, dataloader_0, lr_0, epochs_0)
     task_1 = ModelTask("Model 1", model_hydra_1, pretraining_loss, dataloader_1, lr_1, epochs_1)
-    #task_2 = ModelTask("Model 2", model_hydra_2, pretraining_loss, dataloader_2, lr_2, epochs_2)
+    task_2 = ModelTask("Model 2", model_hydra_2, pretraining_loss, dataloader_2, lr_2, epochs_2)
 
 
     # create orchestrator
-    orchestra = ModelOrchestrator([task_0, task_1])
+    orchestra = ModelOrchestrator([task_0, task_1, task_2])
     orchestra.verbose = 1
 
     """
-     Buffer space for safety. If you run into OOM's, adjusting this value
-     can help against minor variations in memory consumption.
+     The Double-Buffer. Adjusting this up or down a bit can help to address minor
+     errors in partitioning memory consumption.
     """
-    orchestra.buffer = None
+    orchestra.buffer = 10000
+
     orchestra.generate()
     orchestra.train_models()
 
