@@ -112,72 +112,175 @@ def main():
 
     model_0 = torch.nn.Sequential(
 
-        custom.BertEmbedding(28783, 768, transpose=False),
+        custom.BertEmbedding(28783, 1024, transpose=False),
         
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 4
         
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 8
         
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 12
         
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 16
         
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 20
         
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 24 - BERT-Large Size (340M params)
         
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 28
         
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 32
         
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 12
         
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 36
         
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 40
         
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-        custom.BertTransformerEncoderLayer(768, 16, 1024, 0.5),
-
-        torch.nn.Linear(768, 768),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 44
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 48
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 52
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 56
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 60
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 64
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 68
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 72
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 76
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 80
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 84
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 88
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 92
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 28
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 96
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 100
+       
+ 
+        torch.nn.Linear(1024, 1024),
         torch.nn.GELU(),
-        torch.nn.LayerNorm(768, eps=1e-12),
-        torch.nn.Linear(768, 28783)
+        torch.nn.LayerNorm(1024, eps=1e-12),
+        torch.nn.Linear(1024, 28783)
 
     )
 
