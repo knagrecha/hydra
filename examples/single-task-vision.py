@@ -58,8 +58,8 @@ testing_data = datasets.FashionMNIST(
 
 
 # The model itself isn't huge, so we compensate with a *massive* batch size
-train_dataloader = DataLoader(training_data, batch_size=64, shuffle=True)
-test_dataloader = DataLoader(testing_data, batch_size=64, shuffle=False)
+train_dataloader = DataLoader(training_data, batch_size=8192, shuffle=True)
+test_dataloader = DataLoader(testing_data, batch_size=8192, shuffle=False)
 
 
 
