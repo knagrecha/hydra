@@ -258,10 +258,10 @@ class ModelOrchestrator():
             #    print  ([ task for task in self.active_tasks])
             
             
-            str_builder = "====== | "
-            for task in self.tasks:
-                str_builder+=(task.name + ": Epoch {}, {} / {} minibatches complete, last runtime: {:.2f}, last loss: {:.2f} | ".format( task.total_epochs - task.epochs, task.total_length - task.batches_remaining, task.total_length, task.last_runtime, task.last_loss))
-            print(str_builder+"======", end='\r', flush=True)
+            #str_builder = "====== | "
+            #for task in self.tasks:
+            #    str_builder+=(task.name + ": Epoch {}, {} / {} minibatches complete, last runtime: {:.2f}, last loss: {:.2f} | ".format( task.total_epochs - task.epochs, task.total_length - task.batches_remaining, task.total_length, task.last_runtime, task.last_loss))
+            #print(str_builder+"======", end='\r', flush=True)
                               
             
             
