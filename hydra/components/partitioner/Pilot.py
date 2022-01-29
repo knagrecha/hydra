@@ -138,8 +138,8 @@ class Pilot():
                 del grads # Gradients are discarded immediately after use
                 intermediate_activations.append(out) # Add the output of this layer as an intermediate activation
                 
-                if verbose == 1:
-                    print("| Splits: {} | Layer Index: {} | Memory {} |".format(partition_indices, partitioning_index, get_free_space(self.selected_device_index)))
+                #if verbose == 1:
+                #    print("| Splits: {} | Layer Index: {} | Memory {} |".format(partition_indices, partitioning_index, get_free_space(self.selected_device_index)))
                     
                     
                 
