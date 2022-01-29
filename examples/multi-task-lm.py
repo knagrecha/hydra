@@ -284,9 +284,6 @@ def main():
 
     )
 
-    params = sum(p.numel() for p in model_0.parameters())
-    print("Total parameters: {}".format(params))
-
 
     model_1 = copy.deepcopy(model_0)
     model_2 = copy.deepcopy(model_0)
