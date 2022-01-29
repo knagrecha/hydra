@@ -288,7 +288,7 @@ class Pilot():
 
             
         if verbose == 1:
-            print()
+            print("==============Number of Shards: {}======================".format(len(forward_shards)))
             print("=======Anticipated Minibatch Times: {:.2f}s=======".format(total_time))
             
         backward_shards.reverse()

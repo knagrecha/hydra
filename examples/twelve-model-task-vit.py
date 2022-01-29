@@ -55,19 +55,6 @@ def collate_batch(batch_data, batch_size, mask_frac, mask_id, cls_id):
     batch_data = batch_data.masked_fill(lm_mask.bool().unsqueeze(1), mask_id)
     return batch_data, [lm_mask, targets]
 
-"""
-    Custom loss function
-"""
-
-def pretraining_loss(out, targets):
-    lm_mask, label = targets
-    out = torch.stack([out[i] for i in range(lm_mask.size(0)) if lm_mask[i]])
-    loss_computer = torch.nn.CrossEntropyLoss()
-    out = out.view(-1, 28783)
-    label = label.to(out.device)
-
-    return loss_computer(out, label)
-
 
 """
     Helper function to create a training dataloader.
@@ -284,32 +271,33 @@ def main():
     model_10 = get_model(110) # 2B params
     model_11 = get_model(110)
     
-    params = sum(p.numel() for p in model_11.parameters())
+    params = sum(p.numel() for p in model_0.parameters())
     print("Total parameters: {}".format(params))
 
 
-    task_0 = ModelTask("Model 0", model_0, pretraining_loss, get_data_loader_train(64), 0.001, 5)
-    task_1 = ModelTask("Model 1", model_1, pretraining_loss, get_data_loader_train(128), 0.001, 5)
+    task_0 = ModelTask("Model 0", model_0, nn.CrossEntropyLoss(), get_data_loader_train(64), 0.001, 5)
+    task_1 = ModelTask("Model 1", model_1, nn.CrossEntropyLoss(), get_data_loader_train(128), 0.001, 5)
 
-    task_2 = ModelTask("Model 2", model_2, pretraining_loss, get_data_loader_train(64), 0.001, 5)
-    task_3 = ModelTask("Model 3", model_3, pretraining_loss, get_data_loader_train(128), 0.001, 5)
+    task_2 = ModelTask("Model 2", model_2, nn.CrossEntropyLoss(), get_data_loader_train(64), 0.001, 5)
+    task_3 = ModelTask("Model 3", model_3, nn.CrossEntropyLoss(), get_data_loader_train(128), 0.001, 5)
     
-    task_4 = ModelTask("Model 4", model_4, pretraining_loss, get_data_loader_train(64), 0.001, 5)
-    task_5 = ModelTask("Model 5", model_5, pretraining_loss, get_data_loader_train(128), 0.001, 5)
+    task_4 = ModelTask("Model 4", model_4, nn.CrossEntropyLoss(), get_data_loader_train(64), 0.001, 5)
+    task_5 = ModelTask("Model 5", model_5, nn.CrossEntropyLoss(), get_data_loader_train(128), 0.001, 5)
     
-    task_6 = ModelTask("Model 6", model_6, pretraining_loss, get_data_loader_train(64), 0.001, 5)
-    task_7 = ModelTask("Model 7", model_7, pretraining_loss, get_data_loader_train(128), 0.001, 5)
+    task_6 = ModelTask("Model 6", model_6, nn.CrossEntropyLoss(), get_data_loader_train(64), 0.001, 5)
+    task_7 = ModelTask("Model 7", model_7, nn.CrossEntropyLoss(), get_data_loader_train(128), 0.001, 5)
     
-    task_8 = ModelTask("Model 8", model_8, pretraining_loss, get_data_loader_train(64), 0.001, 5)
-    task_9 = ModelTask("Model 9", model_9, pretraining_loss, get_data_loader_train(128), 0.001, 5)
+    task_8 = ModelTask("Model 8", model_8, nn.CrossEntropyLoss(), get_data_loader_train(64), 0.001, 5)
+    task_9 = ModelTask("Model 9", model_9, nn.CrossEntropyLoss(), get_data_loader_train(128), 0.001, 5)
     
-    task_10 = ModelTask("Model 10", model_10, pretraining_loss, get_data_loader_train(64), 0.001, 5)
-    task_11 = ModelTask("Model 11", model_11, pretraining_loss, get_data_loader_train(128), 0.001, 5)
+    task_10 = ModelTask("Model 10", model_10, nn.CrossEntropyLoss(), get_data_loader_train(64), 0.001, 5)
+    task_11 = ModelTask("Model 11", model_11, nn.CrossEntropyLoss(), get_data_loader_train(128), 0.001, 5)
 
     
 
     # create orchestrator
     orchestra = ModelOrchestrator([task_0, task_1, task_2, task_3, task_4, task_5, task_6, task_7, task_8, task_9, task_10, task_11])
+    #orchestra = ModelOrchestrator([task_0, task_1])
     orchestra.verbose = 1
 
     """
