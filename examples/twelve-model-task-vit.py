@@ -18,7 +18,7 @@ import hydra
 from hydra import ModelTask, ModelOrchestrator
 import customLayers as custom
 import copy
-import torch, einsum
+import torch
 from torchvision.datasets import CIFAR10
 from torch.utils.data import DataLoader
 from os import path
@@ -229,17 +229,17 @@ class Attention(nn.Module):
 
         # attention
 
-        dots = einsum('b h i d, b h j d -> b h i j', q, k) * self.scale
+        dots = torch.einsum('b h i d, b h j d -> b h i j', q, k) * self.scale
         attn = dots.softmax(dim=-1)
 
         # re-attention
 
-        attn = einsum('b h i j, h g -> b g i j', attn, self.reattn_weights)
+        attn = torch.einsum('b h i j, h g -> b g i j', attn, self.reattn_weights)
         attn = self.reattn_norm(attn)
 
         # aggregate and out
 
-        out = einsum('b h i j, b h j d -> b h i d', attn, v)
+        out = torch.einsum('b h i j, b h j d -> b h i d', attn, v)
         out = rearrange(out, 'b h n d -> b n (h d)')
         out =  self.to_out(out)
         return out
