@@ -18,7 +18,7 @@ import hydra
 from hydra import ModelTask, ModelOrchestrator
 import customLayers as custom
 import copy
-import torch
+import torch, einsum
 from torchvision.datasets import CIFAR10
 from torch.utils.data import DataLoader
 from os import path
