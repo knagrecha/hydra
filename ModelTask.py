@@ -18,7 +18,7 @@ from timeit import default_timer as timer
 from hydra.utilities import get_free_space
 import numpy as np
 from torch import multiprocessing as multiprocessing
-from hydra.components.partitioner import Pilot
+from .components.partitioner import Pilot
 
 
 def get_load_time(shard, a, device):
@@ -61,7 +61,7 @@ class ModelTask():
         self.batches_remaining = len(dataloader)
         self.saved_inter_output = []
         self.gradient = None
-        self.verbose = 0
+        
 
         if (use_scaler):
             self.scaler = torch.cuda.amp.GradScaler()
@@ -117,7 +117,6 @@ class ModelTask():
                                                                         self.lr, 
                                                                         verbose
                                                                         )
-        self.verbose = verbose
         
         self.queue.extend(self.forward_shards)
         self.queue.extend(self.backward_shards)
@@ -163,6 +162,7 @@ class ModelTask():
             batch_full = next(self.dataloader)
         except StopIteration:
             del self.dataloader
+            
             self.epochs -= 1
             self.dataloader = iter(self._old_data)
             self.batches_remaining = len(self._old_data)
@@ -174,10 +174,9 @@ class ModelTask():
         self.label = batch_full[-1]
         
         self.curr_cycle = 0
-  
-        self.last_mini_time = timer()
-    
         
+        
+        self.last_mini_time = timer()
     def get_shard(self):
         shard = self.queue.pop(0)
         if (self.epochs > 1 or self.batches_remaining >= 1):

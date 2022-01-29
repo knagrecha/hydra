@@ -64,7 +64,6 @@ class ModelOrchestrator():
     def setup_all_models(self):
         start = timer()
         for task in self.tasks:
-            
             task.setup(self.verbose, self.buffer)
             #print("TASK {} finished setup".format(task.name))
         #print("ALL TASKS SETUP!")
@@ -186,7 +185,7 @@ class ModelOrchestrator():
         
 
 
-        old_time = 0
+        
 
         cache_task = None # use this to try and "guess" the next task's completion time for that shard.
         cache_device = None
@@ -252,25 +251,19 @@ class ModelOrchestrator():
         
         # runtime
         start = timer()
+        old_time = 0
         while len(self.tasks) > 0:
-            #ctr+=1
-            #if (timer() - old_time > 0.5):        
-            #    print  ([ task for task in self.active_tasks])
-            
-            
-            #str_builder = "====== | "
-            #for task in self.tasks:
-            #    str_builder+=(task.name + ": Epoch {}, {} / {} minibatches complete, last runtime: {:.2f}, last loss: {:.2f} | ".format( task.total_epochs - task.epochs, task.total_length - task.batches_remaining, task.total_length, task.last_runtime, task.last_loss))
-            #print(str_builder+"======", end='\r', flush=True)
-                              
-            
-            
+            if (self.verbose == 1 and timer() - old_time > 60):
+                print(timer())
+                for task in self.tasks:
+                    print(task.name + ": Epoch {}, {} / {} minibatches complete, last runtime: {:.2f}, last loss: {:.2f} | ".format( task.total_epochs - task.epochs, task.total_length - task.batches_remaining, task.total_length, task.last_runtime, task.last_loss))
+                old_time = timer()
             try:
                 self.sleep_event.wait()
                 self.sleep_event.clear()
                 if (len(self.tasks) == 0):
                     break
-                ctr = 0
+   
                 if CACHE_SYSTEM and len(self.idle_tasks) > 0:
                     
                     holder = self.available_devices.copy()

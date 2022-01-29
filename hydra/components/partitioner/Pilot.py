@@ -80,7 +80,7 @@ class Pilot():
         shard_batch_input = test_batch[0:len(test_batch)-1]
         
         # Place the batch on-device
-        batch_input = [x.to(self.selected_device) for x in shard_batch_input]
+        batch_input = move_batch_to_device(shard_batch_input, self.selected_device) 
         
         
         partitioned_layers = []
@@ -97,11 +97,13 @@ class Pilot():
             print("======================Partitioning for {} layers======================".format(len(all_layers)))
             
         while partitioning_index < (len(all_layers)):
-           
+            
             batch_input = move_batch_to_device(batch_input, self.selected_device)      
+            #print(get_free_space(self.selected_device_index))
             oom = False
           
             try:
+                
                 all_layers[partitioning_index] = all_layers[partitioning_index].to(self.selected_device)
                 partitioned_layers.append(all_layers[partitioning_index])
 
@@ -184,8 +186,7 @@ class Pilot():
 
                         shard_batch_input = move_batch_to_device(shard_batch_input, self.selected_device)
 
-                        if verbose == 1:
-                            print("Free Memory: {}".format(get_free_space(self.selected_device_index)))
+                        
 
 
                         start_f = timer() # used for scheduler
@@ -240,6 +241,9 @@ class Pilot():
                 
                 partitioning_index -= roll_back_count # Return to partitioning from the appropriate location
                 partition_indices.append(partitioning_index) # Record partition location
+                torch.cuda.empty_cache() # not necessary, just makes memory debugging easier to view
+                if verbose == 1:
+                            print("Free Memory: {}".format(get_free_space(self.selected_device_index)))
                 
                 
         # While loop has terminated, but we have not sharded the last set of layers yet

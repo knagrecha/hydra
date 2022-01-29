@@ -347,35 +347,35 @@ def main():
     device_count = torch.cuda.device_count()
 
     model_0 = get_model()
-    model_1 = get_model()
-    model_2 = get_model()
+    #model_1 = get_model()
+    #model_2 = get_model()
     
     params = sum(p.numel() for p in model_0.parameters())
     print("Total parameters: {}".format(params))
     
     dataloader_0 = get_data_loader_train(8) # Generate dataloader
-    dataloader_1 = get_data_loader_train(16)
-    dataloader_2 = get_data_loader_train(32)
+    #dataloader_1 = get_data_loader_train(16)
+    #dataloader_2 = get_data_loader_train(32)
     
     
 
     
     task_0 = ModelTask("Model 0", model_0, pretraining_loss, dataloader_0, 0.001, 4)
-    task_1 = ModelTask("Model 1", model_1, pretraining_loss, dataloader_1, 0.001, 4)
-    task_2 = ModelTask("Model 2", model_2, pretraining_loss, dataloader_2, 0.001, 4)
+    #task_1 = ModelTask("Model 1", model_1, pretraining_loss, dataloader_1, 0.001, 4)
+    #task_2 = ModelTask("Model 2", model_2, pretraining_loss, dataloader_2, 0.001, 4)
     
     
 
 
     # create orchestrator
-    orchestra = ModelOrchestrator([task_0, task_1, task_2])
+    orchestra = ModelOrchestrator([task_0])
     orchestra.verbose = 1
 
     """
      The Double-Buffer. Adjusting this up or down a bit can help to address minor
      errors in partitioning memory consumption.
     """
-    orchestra.buffer = 10000
+    orchestra.buffer = 5000
 
     orchestra.generate()
     orchestra.train_models()
