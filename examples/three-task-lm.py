@@ -1,4 +1,3 @@
-
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -12,6 +11,8 @@
 # limitations under the License.
 # ==============================================================================
 
+
+# Scaled down for demo purposes. Recommend training with 2-4 GPUs.
 
 import hydra
 from hydra import ModelTask, ModelOrchestrator
@@ -52,7 +53,6 @@ def collate_batch(batch_data, batch_size, mask_frac, mask_id, cls_id):
 
 """
     Custom loss function
-
 """
 
 def pretraining_loss(out, targets):
@@ -275,36 +275,92 @@ def main():
         custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
         custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
         # 100
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 104
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 108
+        
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 112
+        
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 116
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 120
+        
+         
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 124
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 128
+        
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 132
+        
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 136
        
- 
         torch.nn.Linear(1024, 1024),
         torch.nn.GELU(),
         torch.nn.LayerNorm(1024, eps=1e-12),
         torch.nn.Linear(1024, 28783)
 
     )
+    
+    params = sum(p.numel() for p in model_0.parameters())
+    print("Total parameters: {}".format(params))
 
-
+    
     model_1 = copy.deepcopy(model_0)
     model_2 = copy.deepcopy(model_0)
-
-    dataloader_0 = get_data_loader_train(32) # Generate dataloader
-
-    dataloader_1 = get_data_loader_train(32)
-
-    dataloader_2 = get_data_loader_train(64)
     
-    lr_0 = 0.01
-    lr_1 = 0.001
-    lr_2 = 0.001
+    dataloader_0 = get_data_loader_train(8) # Generate dataloader
+    dataloader_1 = get_data_loader_train(16)
+    dataloader_2 = get_data_loader_train(32)
     
-    epochs_0 = 2
-    epochs_1 = 4
-    epochs_2 = 8
     
-    task_0 = ModelTask("Model 0", model_0, pretraining_loss, dataloader_0, lr_0, epochs_0)
-    task_1 = ModelTask("Model 1", model_1, pretraining_loss, dataloader_1, lr_1, epochs_1)
-    task_2 = ModelTask("Model 2", model_2, pretraining_loss, dataloader_2, lr_2, epochs_2)
+
+    
+    task_0 = ModelTask("Model 0", model_0, pretraining_loss, dataloader_0, 0.001, 4)
+    task_1 = ModelTask("Model 1", model_1, pretraining_loss, dataloader_1, 0.001, 4)
+    task_2 = ModelTask("Model 2", model_2, pretraining_loss, dataloader_2, 0.001, 4)
+    
+    
 
 
     # create orchestrator
@@ -319,6 +375,6 @@ def main():
 
     orchestra.generate()
     orchestra.train_models()
-
+    
 if __name__ == "__main__":
     main()

@@ -14,8 +14,8 @@
 
 # This task requres A LOT of DRAM, so be careful!
 
-#import hydra
-#from hydra import ModelTask, ModelOrchestrator
+import hydra
+from hydra import ModelTask, ModelOrchestrator
 import customLayers as custom
 import copy
 import torch
