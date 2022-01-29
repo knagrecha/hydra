@@ -262,8 +262,8 @@ def main():
     model_1 = get_model(24, 1024, 4096, 16) 
     model_2 = get_model(32)# ViT-Huge Size (600M params)
     model_3 = get_model(32) 
-    model_4 = get_model(42) # 800M params
-    model_5 = get_model(42)
+    model_4 = get_model(38) # 800M params
+    model_5 = get_model(38)
     model_6 = get_model(54) # 1B params
     model_7 = get_model(54)
     model_8 = get_model(80) # 1.5B params
@@ -275,23 +275,23 @@ def main():
     print("Total parameters: {}".format(params))
 
 
-    task_0 = ModelTask("Model 0", model_0, nn.CrossEntropyLoss(), get_data_loader_train(512), 0.001, 5)
-    task_1 = ModelTask("Model 1", model_1, nn.CrossEntropyLoss(), get_data_loader_train(1024), 0.001, 5)
+    task_0 = ModelTask("Model 0", model_0, nn.CrossEntropyLoss(), get_data_loader_train(256), 0.001, 5)
+    task_1 = ModelTask("Model 1", model_1, nn.CrossEntropyLoss(), get_data_loader_train(512), 0.001, 5)
 
-    task_2 = ModelTask("Model 2", model_2, nn.CrossEntropyLoss(), get_data_loader_train(512), 0.001, 5)
-    task_3 = ModelTask("Model 3", model_3, nn.CrossEntropyLoss(), get_data_loader_train(1024), 0.001, 5)
+    task_2 = ModelTask("Model 2", model_2, nn.CrossEntropyLoss(), get_data_loader_train(256), 0.001, 5)
+    task_3 = ModelTask("Model 3", model_3, nn.CrossEntropyLoss(), get_data_loader_train(512), 0.001, 5)
     
-    task_4 = ModelTask("Model 4", model_4, nn.CrossEntropyLoss(), get_data_loader_train(512), 0.001, 5)
-    task_5 = ModelTask("Model 5", model_5, nn.CrossEntropyLoss(), get_data_loader_train(1024), 0.001, 5)
+    task_4 = ModelTask("Model 4", model_4, nn.CrossEntropyLoss(), get_data_loader_train(256), 0.001, 5)
+    task_5 = ModelTask("Model 5", model_5, nn.CrossEntropyLoss(), get_data_loader_train(512), 0.001, 5)
     
-    task_6 = ModelTask("Model 6", model_6, nn.CrossEntropyLoss(), get_data_loader_train(512), 0.001, 5)
-    task_7 = ModelTask("Model 7", model_7, nn.CrossEntropyLoss(), get_data_loader_train(1024), 0.001, 5)
+    task_6 = ModelTask("Model 6", model_6, nn.CrossEntropyLoss(), get_data_loader_train(256), 0.001, 5)
+    task_7 = ModelTask("Model 7", model_7, nn.CrossEntropyLoss(), get_data_loader_train(512), 0.001, 5)
     
-    task_8 = ModelTask("Model 8", model_8, nn.CrossEntropyLoss(), get_data_loader_train(512), 0.001, 5)
-    task_9 = ModelTask("Model 9", model_9, nn.CrossEntropyLoss(), get_data_loader_train(1024), 0.001, 5)
+    task_8 = ModelTask("Model 8", model_8, nn.CrossEntropyLoss(), get_data_loader_train(256), 0.001, 5)
+    task_9 = ModelTask("Model 9", model_9, nn.CrossEntropyLoss(), get_data_loader_train(512), 0.001, 5)
     
-    task_10 = ModelTask("Model 10", model_10, nn.CrossEntropyLoss(), get_data_loader_train(512), 0.001, 5)
-    task_11 = ModelTask("Model 11", model_11, nn.CrossEntropyLoss(), get_data_loader_train(1024), 0.001, 5)
+    task_10 = ModelTask("Model 10", model_10, nn.CrossEntropyLoss(), get_data_loader_train(256), 0.001, 5)
+    task_11 = ModelTask("Model 11", model_11, nn.CrossEntropyLoss(), get_data_loader_train(512), 0.001, 5)
 
     
 
@@ -305,7 +305,7 @@ def main():
      errors in partitioning memory consumption.
     """
     
-    orchestra.buffer = 10000
+    orchestra.buffer = 12000
 
     orchestra.generate()
     orchestra.train_models()
