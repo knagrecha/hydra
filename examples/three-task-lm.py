@@ -105,12 +105,10 @@ def get_data_loader_train(b_size):
 """
     Main function
 """
-def main():
 
 
-    device_count = torch.cuda.device_count()
-
-    model_0 = torch.nn.Sequential(
+def get_model():
+    return torch.nn.Sequential(
 
         custom.BertEmbedding(28783, 1024, transpose=False),
         
@@ -342,12 +340,18 @@ def main():
 
     )
     
+
+def main():
+
+
+    device_count = torch.cuda.device_count()
+
+    model_0 = get_model()
+    model_1 = get_model()
+    model_2 = get_model()
+    
     params = sum(p.numel() for p in model_0.parameters())
     print("Total parameters: {}".format(params))
-
-    
-    model_1 = copy.deepcopy(model_0)
-    model_2 = copy.deepcopy(model_0)
     
     dataloader_0 = get_data_loader_train(8) # Generate dataloader
     dataloader_1 = get_data_loader_train(16)
