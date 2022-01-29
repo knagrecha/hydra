@@ -11,12 +11,14 @@ To install Hydra, follow the [Installation Guide](https://github.com/knagrecha/h
 ## (For VLDB)
 The files to run the end-to-end tests are twelve_model_task.py and twelve_model_task_vit.py. 
 
-Please note that running 12-task 8-GPU single node experiments (like the paper) is an expensive operation that demands a great deal of DRAM and continuous, heavy GPU utilization. If you want to run a smaller scale version (2-3 GPUs) just to observe the system, I have also prepared a file with a relatively lighter workload, three-task-lm.py.
+Please note that running 12-task 8-GPU single node experiments (like the paper) is an expensive operation that demands a great deal of DRAM and continuous, heavy GPU utilization (see debugging section for more details). If you want to run a smaller scale version (2-3 GPUs) just to observe the system, I have also prepared a file with a relatively lighter workload, three-task-lm.py.
 
 
 ## Debugging
 
 Expensive multi-task operations can be very demanding on the hardware, and GPU failure can occur. If you notice in the training output that one task or another seems to have frozen in place (minibatch counter is not advancing) when you expect it to, it is likely that the GPU it is meant to be scheduled to is no longer executing properly.
+
+Note that GPU failure WILL NOT cause Hydra to stop training - it will still work fine! However Hydra will no longer be able to use disconnected GPUs for parallelization.
 
 ## Running
 
