@@ -25,6 +25,7 @@ from os import path
 import torch.nn as nn
 from timeit import timeit as timer
 from einops import rearrange, repeat
+import torchvision.transforms as transforms
 from einops.layers.torch import Rearrange
 
 """
@@ -76,7 +77,7 @@ def get_data_loader_train(b_size):
     start = timer()
     print("\nPreparing to load dataset....")
 
-
+    transform = transforms.Compose( [transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
     dataset = CIFAR10("cifar", train=True, download=True, transform=transform)
 
     return torch.utils.data.DataLoader(dataset, batch_size=b_size)
