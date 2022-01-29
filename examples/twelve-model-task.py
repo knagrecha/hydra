@@ -12,7 +12,7 @@
 # ==============================================================================
 
 
-# This task requres A LOT of DRAM, so be careful!
+# Scaled down for demo purposes. Recommend training with 2-4 GPUs.
 
 import hydra
 from hydra import ModelTask, ModelOrchestrator
@@ -105,6 +105,7 @@ def get_data_loader_train(b_size):
 """
     Main function
 """
+
 
 def get_model():
     return torch.nn.Sequential(
@@ -346,13 +347,7 @@ def main():
     device_count = torch.cuda.device_count()
 
     model_0 = get_model()
-    
-    params = sum(p.numel() for p in model_0.parameters())
-    print("Total parameters: {}".format(params))
-
-    
     model_1 = get_model()
-    model_2 = get_model()
     model_3 = get_model()
     model_4 = get_model()
     model_5 = get_model()
@@ -362,40 +357,34 @@ def main():
     model_9 = get_model()
     model_10 = get_model()
     model_11 = get_model()
-    model_12 = get_model()
-
+    
+    params = sum(p.numel() for p in model_0.parameters())
+    print("Total parameters: {}".format(params))
+    
     dataloader_0 = get_data_loader_train(8) # Generate dataloader
     dataloader_1 = get_data_loader_train(16)
     dataloader_2 = get_data_loader_train(32)
     
-    dataloader_3 = get_data_loader_train(8) # Generate dataloader
-    dataloader_4 = get_data_loader_train(16)
-    dataloader_5 = get_data_loader_train(32)
     
-    dataloader_6 = get_data_loader_train(8) # Generate dataloader
-    dataloader_7 = get_data_loader_train(16)
-    dataloader_8 = get_data_loader_train(32)
-    
-    dataloader_9 = get_data_loader_train(8) # Generate dataloader
-    dataloader_10 = get_data_loader_train(16)
-    dataloader_11 = get_data_loader_train(32)
 
     
-    task_0 = ModelTask("Model 0", model_0, pretraining_loss, dataloader_0, 0.001, 4)
-    task_1 = ModelTask("Model 1", model_1, pretraining_loss, dataloader_1, 0.001, 4)
-    task_2 = ModelTask("Model 2", model_2, pretraining_loss, dataloader_2, 0.001, 4)
+    task_0 = ModelTask("Model 0", model_0, pretraining_loss, get_data_loader_train(8), 0.001, 4)
+    task_1 = ModelTask("Model 1", model_1, pretraining_loss, get_data_loader_train(16), 0.001, 4)
+    task_2 = ModelTask("Model 2", model_2, pretraining_loss, get_data_loader_train(32), 0.001, 4)
     
-    task_3 = ModelTask("Model 3", model_3, pretraining_loss, dataloader_3, 0.0001, 4)
-    task_4 = ModelTask("Model 4", model_4, pretraining_loss, dataloader_4, 0.0001, 4)
-    task_5 = ModelTask("Model 5", model_5, pretraining_loss, dataloader_5, 0.0001, 4)
+    task_3 = ModelTask("Model 3", model_3, pretraining_loss, get_data_loader_train(8), 0.0001, 4)
+    task_4 = ModelTask("Model 4", model_4, pretraining_loss, get_data_loader_train(16), 0.0001, 4)
+    task_5 = ModelTask("Model 5", model_5, pretraining_loss, get_data_loader_train(32), 0.0001, 4)
     
-    task_6 = ModelTask("Model 6", model_6, pretraining_loss, dataloader_6, 0.00001, 4)
-    task_7 = ModelTask("Model 7", model_7, pretraining_loss, dataloader_7, 0.00001, 4)
-    task_8 = ModelTask("Model 8", model_8, pretraining_loss, dataloader_8, 0.00001, 4)
+    task_6 = ModelTask("Model 6", model_6, pretraining_loss, get_data_loader_train(8), 0.00001, 4)
+    task_7 = ModelTask("Model 7", model_7, pretraining_loss, get_data_loader_train(16), 0.00001, 4)
+    task_8 = ModelTask("Model 8", model_8, pretraining_loss, get_data_loader_train(32), 0.00001, 4)
     
-    task_9 = ModelTask("Model 9", model_9, pretraining_loss, dataloader_9, 0.000001, 4)
-    task_10 = ModelTask("Model 10", model_10, pretraining_loss, dataloader_10, 0.000001, 4)
-    task_11 = ModelTask("Model 11", model_11, pretraining_loss, dataloader_11, 0.000001, 4)
+    task_9 = ModelTask("Model 9", model_9, pretraining_loss, get_data_loader_train(8), 0.000001, 4)
+    task_10 = ModelTask("Model 10", model_10, pretraining_loss, get_data_loader_train(16), 0.000001, 4)
+    task_11 = ModelTask("Model 11", model_11, pretraining_loss, get_data_loader_train(32), 0.000001, 4)
+    
+    
 
 
     # create orchestrator
