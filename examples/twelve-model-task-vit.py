@@ -258,9 +258,11 @@ def get_model(depth, hidden=1280, mlp_size=5120, heads=16):
     
     for i in range(depth):
         modules.append(Residual(PreNorm(hidden, Attention(dim=hidden, heads=heads, dim_head=64, dropout =0.5))))
-        modules.append(Residual(PreNorm(hidden, FeedForward(hidden_dim=hidden, dim=mlp_size, dropout =0.5))))
+        
+        modules.append(Residual(PreNorm(hidden, FeedForward(dim=hidden, hidden_dim=mlp_size, dropout =0.5))))
+        
     modules.append(Selector()),
-    modules.append(nn.Linear(1280, 10))
+    modules.append(nn.Linear(hidden, 10))
 
     return nn.Sequential(*modules)
  
