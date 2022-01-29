@@ -18,7 +18,7 @@ import torch.optim as optim
 import threading
 import gc
 from timeit import default_timer as timer
-from hydra.utilities import get_free_space, get_used_space
+from hydra.utilities import get_free_space, move_batch_to_device, get_used_space
 import math
 #import curses
 import numpy as np
