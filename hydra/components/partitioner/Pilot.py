@@ -243,7 +243,7 @@ class Pilot():
                 partition_indices.append(partitioning_index) # Record partition location
                 torch.cuda.empty_cache() # not necessary, just makes memory debugging easier to view
                 if verbose == 1:
-                            print("Free Memory: {}".format(get_free_space(self.selected_device_index)))
+                    print("Free Memory: {}".format(get_free_space(self.selected_device_index)))
                 
                 
         # While loop has terminated, but we have not sharded the last set of layers yet
