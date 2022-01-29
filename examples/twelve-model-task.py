@@ -14,8 +14,8 @@
 
 # This task requres A LOT of DRAM, so be careful!
 
-import hydra
-from hydra import ModelTask, ModelOrchestrator
+#import hydra
+#from hydra import ModelTask, ModelOrchestrator
 import customLayers as custom
 import copy
 import torch
@@ -275,16 +275,77 @@ def main():
         custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
         custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
         # 100
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 104
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 108
+        
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 112
+        
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 116
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 120
+        
+         
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 124
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 128
+        
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 132
+        
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 136
        
- 
         torch.nn.Linear(1024, 1024),
         torch.nn.GELU(),
         torch.nn.LayerNorm(1024, eps=1e-12),
         torch.nn.Linear(1024, 28783)
 
     )
+    
+    params = sum(p.numel() for p in model_0.parameters())
+    print("Total parameters: {}".format(params))
 
-
+    
     model_1 = copy.deepcopy(model_0)
     model_2 = copy.deepcopy(model_0)
     model_3 = copy.deepcopy(model_0)
@@ -344,6 +405,6 @@ def main():
 
     orchestra.generate()
     orchestra.train_models()
-
+    
 if __name__ == "__main__":
     main()
