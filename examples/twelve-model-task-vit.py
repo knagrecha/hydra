@@ -275,23 +275,23 @@ def main():
     print("Total parameters: {}".format(params))
 
 
-    task_0 = ModelTask("Model 0", model_0, nn.CrossEntropyLoss(), get_data_loader_train(64), 0.001, 5)
-    task_1 = ModelTask("Model 1", model_1, nn.CrossEntropyLoss(), get_data_loader_train(128), 0.001, 5)
+    task_0 = ModelTask("Model 0", model_0, nn.CrossEntropyLoss(), get_data_loader_train(512), 0.001, 5)
+    task_1 = ModelTask("Model 1", model_1, nn.CrossEntropyLoss(), get_data_loader_train(1024), 0.001, 5)
 
-    task_2 = ModelTask("Model 2", model_2, nn.CrossEntropyLoss(), get_data_loader_train(64), 0.001, 5)
-    task_3 = ModelTask("Model 3", model_3, nn.CrossEntropyLoss(), get_data_loader_train(128), 0.001, 5)
+    task_2 = ModelTask("Model 2", model_2, nn.CrossEntropyLoss(), get_data_loader_train(512), 0.001, 5)
+    task_3 = ModelTask("Model 3", model_3, nn.CrossEntropyLoss(), get_data_loader_train(1024), 0.001, 5)
     
-    task_4 = ModelTask("Model 4", model_4, nn.CrossEntropyLoss(), get_data_loader_train(64), 0.001, 5)
-    task_5 = ModelTask("Model 5", model_5, nn.CrossEntropyLoss(), get_data_loader_train(128), 0.001, 5)
+    task_4 = ModelTask("Model 4", model_4, nn.CrossEntropyLoss(), get_data_loader_train(512), 0.001, 5)
+    task_5 = ModelTask("Model 5", model_5, nn.CrossEntropyLoss(), get_data_loader_train(1024), 0.001, 5)
     
-    task_6 = ModelTask("Model 6", model_6, nn.CrossEntropyLoss(), get_data_loader_train(64), 0.001, 5)
-    task_7 = ModelTask("Model 7", model_7, nn.CrossEntropyLoss(), get_data_loader_train(128), 0.001, 5)
+    task_6 = ModelTask("Model 6", model_6, nn.CrossEntropyLoss(), get_data_loader_train(512), 0.001, 5)
+    task_7 = ModelTask("Model 7", model_7, nn.CrossEntropyLoss(), get_data_loader_train(1024), 0.001, 5)
     
-    task_8 = ModelTask("Model 8", model_8, nn.CrossEntropyLoss(), get_data_loader_train(64), 0.001, 5)
-    task_9 = ModelTask("Model 9", model_9, nn.CrossEntropyLoss(), get_data_loader_train(128), 0.001, 5)
+    task_8 = ModelTask("Model 8", model_8, nn.CrossEntropyLoss(), get_data_loader_train(512), 0.001, 5)
+    task_9 = ModelTask("Model 9", model_9, nn.CrossEntropyLoss(), get_data_loader_train(1024), 0.001, 5)
     
-    task_10 = ModelTask("Model 10", model_10, nn.CrossEntropyLoss(), get_data_loader_train(64), 0.001, 5)
-    task_11 = ModelTask("Model 11", model_11, nn.CrossEntropyLoss(), get_data_loader_train(128), 0.001, 5)
+    task_10 = ModelTask("Model 10", model_10, nn.CrossEntropyLoss(), get_data_loader_train(512), 0.001, 5)
+    task_11 = ModelTask("Model 11", model_11, nn.CrossEntropyLoss(), get_data_loader_train(1024), 0.001, 5)
 
     
 
