@@ -16,11 +16,7 @@ Please note that running 12-task 8-GPU single node experiments (like the paper) 
 
 ## Debugging
 
-Expensive multi-task operations can be very demanding on the hardware, and GPU failure can occur. If you notice in the training output that one task or another seems to have frozen in place (minibatch counter is not advancing) when you expect it to, it is likely that the GPU it is meant to be scheduled to is no longer executing properly.
-
-Note that GPU failure WILL NOT cause Hydra to stop training - it will still work fine! However Hydra will no longer be able to use disconnected GPUs for parallelization. Use nvidia-smi occasionally to check if some GPUs have randomly dropped to 0%. All viable GPUs should be at 100% utilization, or close to it, so if you see lower, something is wrong. 
-
-Adjusting the double-buffer size or even increasing/decreasing batch size may help as well.
+Expensive multi-task operations can be very demanding on the hardware, and Hydra attempts to maximize utilization at all times. Variance in GPU memory consumption and background operations can cause issues. If you notice in the training output that one task or another seems to have frozen in place (minibatch counter is not advancing) when you expect it to, it is likely that the GPU it is meant to be scheduled to is no longer executing properly. One possible quick-fix is to increase the orchestrator buffer and try again. We are working on ways to improve robustness against such cases (i.e. fail and retry). Fortunately these issues are usually not consistent and can be resolved by a simple retry.
 
 ## Running
 
