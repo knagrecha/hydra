@@ -8,10 +8,10 @@ Contact knagrech@ucsd.edu for more info.
 
 To install Hydra, follow the [Installation Guide](https://github.com/knagrecha/hydra/blob/main/INSTALL.md).
 
-## (For VLDB)
+## (For VLDB Reviewers)
 The files to run the end-to-end tests are twelve_model_task.py and twelve_model_task_vit.py. 
 
-Please note that running 12-task 8-GPU single node experiments (like the paper) is an expensive operation that demands a great deal of DRAM and continuous, heavy GPU utilization (see debugging section for more details). If you want to run a smaller scale version (2-3 GPUs) just to observe the system, I have also prepared a file with a relatively lighter workload, three-task-lm.py.
+Please note that running 12-task 8-GPU single node experiments (like the paper) is an expensive operation that demands a great deal of DRAM and continuous, heavy GPU utilization (see debugging section for more details). If you want to run a smaller scale version (2-3 GPUs) just to observe the system, I have also prepared test files with relatively lighter workloads, three-task-lm.py and three-task-vit.py. If you want to setup custom experiments, those files can also serve as guides for the expected format.
 
 
 ## Debugging
