@@ -305,7 +305,7 @@ def main():
      errors in partitioning memory consumption.
     """
     
-    orchestra.buffer = 15000
+    orchestra.buffer = 20000
 
     orchestra.generate()
     orchestra.train_models()
