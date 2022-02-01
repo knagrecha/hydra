@@ -348,6 +348,7 @@ def main():
 
     model_0 = get_model()
     model_1 = get_model()
+    model_2 = get_model()
     model_3 = get_model()
     model_4 = get_model()
     model_5 = get_model()
