@@ -362,12 +362,6 @@ def main():
     params = sum(p.numel() for p in model_0.parameters())
     print("Total parameters: {}".format(params))
     
-    dataloader_0 = get_data_loader_train(8) # Generate dataloader
-    dataloader_1 = get_data_loader_train(16)
-    dataloader_2 = get_data_loader_train(32)
-    
-    
-
     
     task_0 = ModelTask("Model 0", model_0, pretraining_loss, get_data_loader_train(8), 0.001, 4)
     task_1 = ModelTask("Model 1", model_1, pretraining_loss, get_data_loader_train(16), 0.001, 4)
