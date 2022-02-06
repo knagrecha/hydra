@@ -9,6 +9,10 @@ You must have the version of PyTorch installed that matches your system. You can
 
 The system is verified and tested for the latest versions of torch, torchvision, and torchtext.
 
+However the examples are only verified for: torch==1.8.1+cu111 torchvision==0.9.1+cu111 torchaudio==0.8.1 torchtext==0.9.1. To install these versions, use
+
+pip3 install torch==1.8.1+cu111 torchvision==0.9.1+cu111 torchaudio==0.8.1 torchtext==0.9.1 -f https://download.pytorch.org/whl/torch_stable.html
+
 ## Download
 ---
 
