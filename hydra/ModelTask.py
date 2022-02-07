@@ -44,6 +44,7 @@ class ModelTask():
         self.model = model
         self.forward_shards = []
         self.backward_shards = []
+        self.remaining_runtime = 0
         
         self.partitioner = partitioner
         

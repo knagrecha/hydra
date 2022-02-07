@@ -253,10 +253,9 @@ class ModelOrchestrator():
         start = timer()
         old_time = 0
         while len(self.tasks) > 0:
-            if (self.verbose == 1 and timer() - old_time > 60):
-                print(timer())
+            if (self.verbose == 1 and timer() - old_time > 10):
                 for task in self.tasks:
-                    print(task.name + ": Epoch {}, {} / {} minibatches complete, last runtime: {:.2f}, last loss: {:.2f} | ".format( task.total_epochs - task.epochs, task.total_length - task.batches_remaining, task.total_length, task.last_runtime, task.last_loss))
+                    print(task.name + ": Epoch {}, {} / {} minibatches complete, remaining time (approx.): {:.2f}hrs, last runtime: {:.2f}, last loss: {:.2f} | ".format( task.total_epochs - task.epochs, task.total_length - task.batches_remaining, task.total_length, task.remaining_runtime/3600, task.last_runtime, task.last_loss))
                 old_time = timer()
             try:
                 self.sleep_event.wait()
@@ -302,6 +301,7 @@ class ModelOrchestrator():
                             #print(len(i.queue))
                             if (len(i.queue) > 0):
                                 task_time = (i.total_time * i.batches_remaining ) + i.total_length * i.total_time * i.epochs
+                                i.remaining_runtime = task_time
                                 if task_time > lrt:
                                     lrt = task_time
                                     cache_task = i

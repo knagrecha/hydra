@@ -138,8 +138,8 @@ class Pilot():
                 del grads # Gradients are discarded immediately after use
                 intermediate_activations.append(out) # Add the output of this layer as an intermediate activation
                 
-                #if verbose == 1:
-                #    print("| Splits: {} | Layer Index: {} | Memory {} |".format(partition_indices, partitioning_index, get_free_space(self.selected_device_index)))
+                if verbose == 1:
+                    print("| Splits: {} | Layer Index: {} | Memory {} |".format(partition_indices, partitioning_index, get_free_space(self.selected_device_index)))
                     
                     
                 
@@ -171,7 +171,7 @@ class Pilot():
                     try:
                         roll_back_count += 1
                         successful_run = True
-                        
+                        batch_input = None
                         pioneer_layer = partitioned_layers.pop() # Remove the last added layer
                         pioneer_layer = pioneer_layer.cpu() # Move it back to CPU memory
                         if (len(partitioned_layers) == 0):
