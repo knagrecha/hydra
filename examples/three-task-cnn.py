@@ -40,7 +40,7 @@ def get_data_loader_train(b_size):
     print("\nPreparing to load dataset....")
 
     transform = transforms.Compose( [transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-    dataset = FakeData(size=100, image_size=(3, 500, 500), num_classes=100, transform=transform)
+    dataset = FakeData(size=100, image_size=(3, 1100, 1100), num_classes=100, transform=transform)
 
     return torch.utils.data.DataLoader(dataset, batch_size=b_size)
 
@@ -50,10 +50,10 @@ def get_model(depth):
     modules = []
     
     for i in range(depth):
-        modules.append(torch.nn.Conv2d(in_channels=3, out_channels=3, kernel_size=3, stride=1, padding='same'))
+        modules.append(torch.nn.Conv2d(in_channels=3, out_channels=3, kernel_size=3, stride=1, padding=(1,1)))
 
     modules.append(nn.Flatten())
-    modules.append(nn.Linear(750000, 100))
+    modules.append(nn.Linear(3000000, 100))
 
     return nn.Sequential(*modules)
  

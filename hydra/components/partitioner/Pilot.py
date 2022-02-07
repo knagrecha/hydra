@@ -20,6 +20,8 @@ import torch
 from hydra.components.partitioner.containers import ShardModel, ShardedTask
 import traceback
 
+from .TensorPartitioner import tensor_partitioner
+
 from hydra.components.executor import Forward, ForwardLoss, Backward
 
 import math
@@ -78,6 +80,9 @@ class Pilot():
         
         # The rest of the return is the batch
         shard_batch_input = test_batch[0:len(test_batch)-1]
+        if (len(shard_batch_input) == 1):
+            shard_batch_input = shard_batch_input[0]
+
         
         # Place the batch on-device
         batch_input = move_batch_to_device(shard_batch_input, self.selected_device) 
@@ -172,11 +177,19 @@ class Pilot():
                         roll_back_count += 1
                         successful_run = True
                         batch_input = None
+                        out = None
                         pioneer_layer = partitioned_layers.pop() # Remove the last added layer
                         pioneer_layer = pioneer_layer.cpu() # Move it back to CPU memory
+                        # We do an end-to-end test on the shard. Discard false intermediate activations.
+                        del intermediate_activations
+                        intermediate_activations = []
+                        torch.cuda.empty_cache() # Consider deleting?
+                         
+                        print("Free memory after cleanup: {}".format(get_free_space(self.selected_device_index)))
+                        
                         if (len(partitioned_layers) == 0):
-                            raise RuntimeError("Error: shard size is 0")
-
+                            tensor_partitioner(pioneer_layer, shard_batch_input, self.selected_device)
+   
                         # We do an end-to-end test on the shard. Discard false intermediate activations.
                         del intermediate_activations
                         intermediate_activations = []
@@ -185,9 +198,6 @@ class Pilot():
                         oom = False
 
                         shard_batch_input = move_batch_to_device(shard_batch_input, self.selected_device)
-
-                        
-
 
                         start_f = timer() # used for scheduler
                         model = ShardModel(nn.ModuleList(partitioned_layers)) # Create a shard-model
@@ -227,6 +237,10 @@ class Pilot():
                         else:
                             if verbose == 1:
                                 print("Partition failed...rolling back another layer")
+                                shard_batch_input = move_batch_to_device(shard_batch_input, torch.device("cpu"))
+                                model = None
+                                gradients = None
+                                out = None
                             successful_run = False
 
                 
