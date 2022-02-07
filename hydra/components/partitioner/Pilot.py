@@ -183,9 +183,6 @@ class Pilot():
                         # We do an end-to-end test on the shard. Discard false intermediate activations.
                         del intermediate_activations
                         intermediate_activations = []
-                        torch.cuda.empty_cache() # Consider deleting?
-                         
-                        print("Free memory after cleanup: {}".format(get_free_space(self.selected_device_index)))
                         
                         if (len(partitioned_layers) == 0):
                             tensor_partitioner(pioneer_layer, shard_batch_input, self.selected_device)
@@ -193,8 +190,7 @@ class Pilot():
                         # We do an end-to-end test on the shard. Discard false intermediate activations.
                         del intermediate_activations
                         intermediate_activations = []
-                        torch.cuda.empty_cache() # Consider deleting?
-
+                      
                         oom = False
 
                         shard_batch_input = move_batch_to_device(shard_batch_input, self.selected_device)
@@ -255,21 +251,14 @@ class Pilot():
                 
                 partitioning_index -= roll_back_count # Return to partitioning from the appropriate location
                 partition_indices.append(partitioning_index) # Record partition location
-                torch.cuda.empty_cache() # not necessary, just makes memory debugging easier to view
-                if verbose == 1:
-                    print("Free Memory: {}".format(get_free_space(self.selected_device_index)))
-                
-                
+
         # While loop has terminated, but we have not sharded the last set of layers yet
         if (len(partitioned_layers) != 0):
             
             del intermediate_activations # Consider deleting
             intermediate_activation = []
             
-            torch.cuda.empty_cache()
-            if verbose == 1:
-                print("Free Memory: {}".format(get_free_space(self.selected_device_index)))
-            
+        
             shard_batch_input = move_batch_to_device(shard_batch_input, self.selected_device)
             start_f = timer() # used for scheduler
 

@@ -82,7 +82,8 @@ def main():
      errors in partitioning memory consumption.
     """
     
-    orchestra.buffer = 10000
+    # We are setting this incredibly high just to force tensor partitioning
+    orchestra.buffer = 30000
 
     orchestra.generate()
     orchestra.train_models()
