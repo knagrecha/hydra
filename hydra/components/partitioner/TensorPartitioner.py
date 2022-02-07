@@ -82,11 +82,6 @@ def tensor_partitioner(layer, batch, device):
         print("Attempting {}-fold partitioning".format(partition_count))
         try:
             
-            # BE CAREFUL - Split generates views, not new tensors. Evaluate memory costs to be sure that
-            # only part of the batch is being moved.
-            
-            
-            
             
             partitioned_batches = torch.chunk(batch, partition_count, chosen_dim)
             print("Partitioned {}X shape: {}".format(partition_count, partitioned_batches[0].shape))
@@ -133,7 +128,11 @@ def tensor_partitioner(layer, batch, device):
                     out = out.cpu().detach().clone()
                     
                 all_outs.append(out)
-                
+            
+            ##### SUCCESS! #####
+            return all_outs
+            
+            
         except Exception as e:
             print(e)
             partition_count += 1
