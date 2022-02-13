@@ -242,8 +242,8 @@ class Pilot():
                 
            
                 
-                forward_shards.append(ShardedTask(model, Forward(shard_count), "f", end_f-start_f, shard_count, lr))
-                backward_shards.append(ShardedTask(model, Backward(shard_count), "b", end_b-start_b, shard_count, lr))
+                forward_shards.append(ShardedTask(model, Forward(shard_count), "f", end_f-start_f, shard_count, lr, [-1]))
+                backward_shards.append(ShardedTask(model, Backward(shard_count), "b", end_b-start_b, shard_count, lr, [-1]))
                 shard_count+=1
 
                 total_time = total_time + (end_f - start_f) + (end_b - start_b)
@@ -252,6 +252,7 @@ class Pilot():
                 partitioning_index -= roll_back_count # Return to partitioning from the appropriate location
                 partition_indices.append(partitioning_index) # Record partition location
 
+                
         # While loop has terminated, but we have not sharded the last set of layers yet
         if (len(partitioned_layers) != 0):
             
@@ -284,8 +285,8 @@ class Pilot():
             model.cpu()  # this is an inplace operation
             end_b = timer()
 
-            forward_shards.append(ShardedTask(model, ForwardLoss(shard_count), "f", end_f - start_f, shard_count, lr) )
-            backward_shards.append(ShardedTask(model, Backward(shard_count), "b", end_b - start_b, shard_count, lr ))
+            forward_shards.append(ShardedTask(model, ForwardLoss(shard_count), "f", end_f - start_f, shard_count, lr, [-1]) )
+            backward_shards.append(ShardedTask(model, Backward(shard_count), "b", end_b - start_b, shard_count, lr, [-1] ))
 
             total_time = total_time + (end_f - start_f) + (end_b - start_b)
 

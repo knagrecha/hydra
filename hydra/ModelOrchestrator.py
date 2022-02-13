@@ -99,7 +99,7 @@ class ModelOrchestrator():
 
             # FORWARD PASS
             if chosen_shard.direction == "f":
-                batch = chosen_task.saved_inter_output[-1]
+                batch = [chosen_task.saved_inter_output[x] for x in chosen_shard.requests]
                 
                 # FINAL FORWARD
                 if chosen_shard.idx == len(chosen_task.forward_shards)- 1:
@@ -118,45 +118,81 @@ class ModelOrchestrator():
                         new_batch = new_batch.detach()
             # BACKWARD PASS       
             else:
-                batch = chosen_task.gradient
-                back_input = chosen_task.saved_inter_output[-1]
+                batch = [chosen_task.gradients[x] for x in chosen_shard.requests]
+                back_input = [chosen_task.saved_inter_output[x] for x in chosen_shard.requests]
                 arg_list = [batch, device, back_input, chosen_task.scaler]
                 chosen_task.scaler, new_batch = chosen_shard.run(arg_list)
+                
 
-            # Hold in place if possible
+                
+                
+            # data movement defined by double-buffering
+            st = timer()
             if (new_batch is not None):
                 if (chosen_task not in self.cached_tasks or chosen_task.queue_len == 1):
-                    new_batch = move_batch_to_device(new_batch, "cpu")
-               
-            my_batch = new_batch
-
-            if (chosen_task not in self.cached_tasks or chosen_task.queue_len > 1):
-                chosen_shard.model = chosen_shard.model.to("cpu", non_blocking=True)
-
+                    new_batch = [move_batch_to_device(b, "cpu") for b in new_batch]
+                    chosen_shard.model = chosen_shard.model.to("cpu", non_blocking=True)
+                else:
+                    next_shard_requests = chosen_task.queue[0].requests
+                    batch_indices = None
+                    if chosen_shard.direction == "b" or l_f:
+                        batch_indices = [x for x in range(len(new_batch))] # no need for addition because back passes push to front
+                    
+                        next_shard_requests_in_batch = [x for x in next_shard_requests if (x >= 0 and x in batch_indices) or (x < 0 and abs(x) <= len(new_batch))]
+                                                        
+                        print(next_shard_requests_in_batch)
+                        
+                    else:
+                        batch_indices = [x + len(chosen_task.saved_inter_output) for x in range(len(new_batch))] # add because forward passes push to end
+                    
+                        next_shard_requests_in_batch = [x for x in next_shard_requests if (x >= 0 and x in batch_indices) or (x < 0 and abs(x) <= len(new_batch))]
+                        
+                        print(next_shard_requests_in_batch)
+                        
+                    
+                    move_backs = []
+                    
+                    for i in range(len(new_batch)):
+                        if i in next_shard_requests_in_batch or i - len(new_batch) - 1 in next_shard_requests_in_batch:
+                            continue
+                        else:
+                            move_backs.append(i)
+                            
+                    print("Intermediates at {} being sent to CPU".format(move_backs))
+                    for idx in move_backs:
+                        new_batch[idx] = move_batch_to_device(new_batch[idx], "cpu")
+            
+            print("End of double buffering in {:.2f}s".format(timer()-st))
             l_f = False
             if chosen_shard.idx == len(chosen_task.forward_shards)- 1 and chosen_shard.direction == "f":
                 l_f = True
-
+                                                    
+                                                    
+            """
+                Multiple input/output handling.
+            
+            """
+            st = timer()
             # if backward pass, update the gradient
             if chosen_shard.direction == "b" or l_f:
-                chosen_task.gradient = my_batch
-                chosen_task.saved_inter_output.pop()
+                chosen_task.gradients = np.delete(chosen_task.gradients, chosen_shard.requests)
+                chosen_task.saved_inter_output = np.delete(chosen_task.saved_inter_output, chosen_shard.requests)
+                    
+                chosen_task.gradients = new_batch + chosen_task.gradients
 
             # if forward, prep it for next pass.
             else:
-                chosen_task.saved_inter_output.append(my_batch)
+                chosen_task.saved_inter_output = chosen_task.saved_inter_output + new_batch
+                                                        
+            print("End of gradient/intermediate updates in {:.2f}s".format(timer()-st))
 
-            #thread_lock.acquire()
             if len(chosen_task.queue) == 0:
-                #print("TASK FULLY COMPLETE")
                 self.tasks.remove(chosen_task)
-                #self.log("Task {} has completely finished at time {}.".format(chosen_task.name, timer()-global_timer))
                 chosen_task.cleanup() # remove for production
             else:
                 chosen_task.clear_settings()
                 self.idle_tasks.append(chosen_task)
 
-            #print("Task {} has finished at time {}.".format(chosen_task.name, timer()-global_timer))
             self.unlock_device(chosen)
             self.active_tasks.remove(chosen_task)
 
@@ -307,9 +343,6 @@ class ModelOrchestrator():
                                     cache_task = i
                         #print("CACHING {} to {}".format(cache_task.name, active_device))
                         if cache_task is not None:
-                            
-
-
                             if (cache_task.queue_len > 1 and cache_task.my_device != active_device):
                                 cache_task.queue[0].model.to("cuda:{0}".format(active_device), non_blocking=True)
 

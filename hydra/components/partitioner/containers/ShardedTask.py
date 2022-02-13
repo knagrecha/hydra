@@ -23,12 +23,14 @@ import torch
     Holds reference to a learning rate, though we can replace this with the ModelTask LR.
     
     The optimizer per-shard is currently just SGD, but we will extend to Adam in the future.
+    
+    Requests is a list defining how many outputs need to be taken from the activations/gradients list
 
 """
 
 class ShardedTask():
 
-    def __init__(self, model, executor, direction, time_taken, idx, lr, *args):
+    def __init__(self, model, executor, direction, time_taken, idx, lr, requests, *args):
         self.lr = lr
         self.model = model
         self.direction = direction
@@ -36,6 +38,9 @@ class ShardedTask():
         self.idx = idx
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr = self.lr)
         self.executor = executor
+        
+        self.requests = requests
+        
     
     def run(self, arg_list):
         if self.executor.type != "Forward":

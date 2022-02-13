@@ -83,4 +83,4 @@ class ForwardLoss():
 
         delete_batch(batch_input)
 
-        return scaler, pass_back_gradients, loss.item()
+        return scaler, np.array([pass_back_gradients]), loss.item()

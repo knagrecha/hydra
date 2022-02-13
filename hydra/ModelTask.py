@@ -21,6 +21,7 @@ from torch import multiprocessing as multiprocessing
 from hydra.components.partitioner import Pilot
 
 
+
 def get_load_time(shard, a, device):
     b = a[:-1]
     b = [d.to(device) for d in b]
@@ -61,7 +62,7 @@ class ModelTask():
         self.queue = []
         self.batches_remaining = len(dataloader)
         self.saved_inter_output = []
-        self.gradient = None
+        self.gradients = []
         self.verbose = 0
 
         if (use_scaler):

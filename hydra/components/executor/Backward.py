@@ -88,4 +88,4 @@ class Backward():
         model.zero_grad()
 
 
-        return scaler, pass_back_gradients 
+        return scaler, np.array([pass_back_gradients]) 

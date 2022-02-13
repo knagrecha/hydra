@@ -13,15 +13,15 @@
 
 from hydra.utilities import delete_batch, move_batch_to_device
 import torch
+
 """
     Generic Forward pass module. Must take as input the model, device, and batch.
     Returns output batch.
-
 """
 
-class Forward():
+class Splitter():
     def __init__(self, idx):
-        self.type="Forward"
+        self.type="Splitter"
         self.idx = idx
 
     def run(self, model, batch_input, device):
@@ -36,4 +36,4 @@ class Forward():
 
         delete_batch(batch_input)
             
-        return np.array([ns_labels])
+        return ns_labels
