@@ -25,10 +25,13 @@ class Forward():
         self.idx = idx
 
     def run(self, model, batch_input, device):
-    
+
         old = next(model.parameters()).device
         model.to(device, non_blocking=True)
 
+        # default forward/backward assumes single input
+        batch_input = batch_input[0]
+        
         batch_input = move_batch_to_device(batch_input, device)
         
         with torch.no_grad() and torch.cuda.amp.autocast():
@@ -36,4 +39,4 @@ class Forward():
 
         delete_batch(batch_input)
             
-        return np.array([ns_labels])
+        return [ns_labels]

@@ -27,6 +27,8 @@ class ForwardLoss():
         self.idx = idx
 
     def run(self, model, optimizer, batch_input, labels, criterion, device, scaler=None):
+        # default forward/backward assumes single input
+        batch_input = batch_input[0]
         
         old = next(model.parameters()).device
         model.to(device, non_blocking=True)
@@ -83,4 +85,7 @@ class ForwardLoss():
 
         delete_batch(batch_input)
 
-        return scaler, np.array([pass_back_gradients]), loss.item()
+        if pass_back_gradients is not None:
+            return scaler, [pass_back_gradients], loss.item()
+        else:
+            return scaler, [], loss.item()

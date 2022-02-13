@@ -26,6 +26,9 @@ class Backward():
         self.idx = idx
 
     def run(self, model, optimizer, batch_input, device, back_input, scaler=None):
+        # default forward/backward assumes single input
+        batch_input = batch_input[0]
+        back_input = back_input[0]
         
         model.to(device, non_blocking=True)
         model.zero_grad()  # zeroes the gradient buffers of all parameters
@@ -57,6 +60,9 @@ class Backward():
         
         if scaler is not None:
             toy_output = scaler.scale(toy_output)
+            
+        
+        
         torch.autograd.backward(toy_output, batch_input)
         del toy_output
         del batch_input
@@ -87,5 +93,7 @@ class Backward():
 
         model.zero_grad()
 
-
-        return scaler, np.array([pass_back_gradients]) 
+        if pass_back_gradients is not None:
+            return scaler, [pass_back_gradients]
+        else:
+            return scaler, []

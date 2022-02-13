@@ -242,8 +242,8 @@ class Pilot():
                 
            
                 
-                forward_shards.append(ShardedTask(model, Forward(shard_count), "f", end_f-start_f, shard_count, lr, [-1]))
-                backward_shards.append(ShardedTask(model, Backward(shard_count), "b", end_b-start_b, shard_count, lr, [-1]))
+                forward_shards.append(ShardedTask(model, Forward(shard_count), "f", end_f-start_f, shard_count, lr, {-1}))
+                backward_shards.append(ShardedTask(model, Backward(shard_count), "b", end_b-start_b, shard_count, lr, {-1}))
                 shard_count+=1
 
                 total_time = total_time + (end_f - start_f) + (end_b - start_b)

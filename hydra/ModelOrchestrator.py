@@ -124,7 +124,9 @@ class ModelOrchestrator():
                 chosen_task.scaler, new_batch = chosen_shard.run(arg_list)
                 
 
-                
+            l_f = False
+            if chosen_shard.idx == len(chosen_task.forward_shards)- 1 and chosen_shard.direction == "f":
+                l_f = True
                 
             # data movement defined by double-buffering
             st = timer()
@@ -139,30 +141,24 @@ class ModelOrchestrator():
                         batch_indices = [x for x in range(len(new_batch))] # no need for addition because back passes push to front
                     
                         next_shard_requests_in_batch = [x for x in next_shard_requests if (x >= 0 and x in batch_indices) or (x < 0 and abs(x) <= len(new_batch))]
-                                                        
-                        print(next_shard_requests_in_batch)
+
                         
                     else:
                         batch_indices = [x + len(chosen_task.saved_inter_output) for x in range(len(new_batch))] # add because forward passes push to end
                     
                         next_shard_requests_in_batch = [x for x in next_shard_requests if (x >= 0 and x in batch_indices) or (x < 0 and abs(x) <= len(new_batch))]
                         
-                        print(next_shard_requests_in_batch)
-                        
-                    
+
                     move_backs = []
                     
                     for i in range(len(new_batch)):
-                        if i in next_shard_requests_in_batch or i - len(new_batch) - 1 in next_shard_requests_in_batch:
+                        if i in next_shard_requests_in_batch or i - len(new_batch) in next_shard_requests_in_batch:
                             continue
                         else:
                             move_backs.append(i)
-                            
-                    print("Intermediates at {} being sent to CPU".format(move_backs))
+
                     for idx in move_backs:
                         new_batch[idx] = move_batch_to_device(new_batch[idx], "cpu")
-            
-            print("End of double buffering in {:.2f}s".format(timer()-st))
             l_f = False
             if chosen_shard.idx == len(chosen_task.forward_shards)- 1 and chosen_shard.direction == "f":
                 l_f = True
@@ -174,18 +170,32 @@ class ModelOrchestrator():
             """
             st = timer()
             # if backward pass, update the gradient
-            if chosen_shard.direction == "b" or l_f:
-                chosen_task.gradients = np.delete(chosen_task.gradients, chosen_shard.requests)
-                chosen_task.saved_inter_output = np.delete(chosen_task.saved_inter_output, chosen_shard.requests)
-                    
+            if chosen_shard.direction == "b":
+                grad_mods = []
+                inter_mods = []
+                
+                for req in chosen_shard.requests:
+                    grad_mods.append(req if req >= 0 else req + len(chosen_task.gradients))
+                    inter_mods.append(req if req >= 0 else req + len(chosen_task.saved_inter_output))
+                
+                for i in sorted(grad_mods, reverse=True):
+                    del chosen_task.gradients[i]
+                for i in sorted(inter_mods, reverse=True):
+                    del chosen_task.saved_inter_output[i]
                 chosen_task.gradients = new_batch + chosen_task.gradients
+            elif l_f:
+                inter_mods = []
+                
+                for req in chosen_shard.requests:
+                    inter_mods.append(req if req >= 0 else req + len(chosen_task.saved_inter_output))
 
+                for i in sorted(inter_mods, reverse=True):
+                    del chosen_task.saved_inter_output[i]
+
+                chosen_task.gradients = new_batch + chosen_task.gradients
             # if forward, prep it for next pass.
             else:
                 chosen_task.saved_inter_output = chosen_task.saved_inter_output + new_batch
-                                                        
-            print("End of gradient/intermediate updates in {:.2f}s".format(timer()-st))
-
             if len(chosen_task.queue) == 0:
                 self.tasks.remove(chosen_task)
                 chosen_task.cleanup() # remove for production
@@ -290,6 +300,7 @@ class ModelOrchestrator():
         old_time = 0
         while len(self.tasks) > 0:
             if (self.verbose == 1 and timer() - old_time > 10):
+                print("*"*64)
                 for task in self.tasks:
                     print(task.name + ": Epoch {}, {} / {} minibatches complete, remaining time (approx.): {:.2f}hrs, last runtime: {:.2f}, last loss: {:.2f} | ".format( task.total_epochs - task.epochs, task.total_length - task.batches_remaining, task.total_length, task.remaining_runtime/3600, task.last_runtime, task.last_loss))
                 old_time = timer()
