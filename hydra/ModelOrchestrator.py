@@ -211,10 +211,7 @@ class ModelOrchestrator():
             chosen_shard.time_cost = profile_timer_end - profile_timer_start # time for process running, assuming model is on device.
             #thread_lock.release()
             self.sleep_event.set()
-            
-            print("{} finishes".format(chosen_task.name))
-            print("Free Spaces: {}".format(["{} | ".format(get_free_space(x)) for x in range(torch.cuda.device_count())]))
-            
+
         except Exception as e:
             traceback.print_exc()
             print(e)
@@ -304,9 +301,9 @@ class ModelOrchestrator():
         old_time = 0
         while len(self.tasks) > 0:
             if (self.verbose == 1 and timer() - old_time > 10):
-                #print("*"*64)
-                #for task in self.tasks:
-                    #print(task.name + ": Epoch {}, {} / {} minibatches complete, remaining time (approx.): {:.2f}hrs, last runtime: {:.2f}, last loss: {:.2f} | ".format( task.total_epochs - task.epochs, task.total_length - task.batches_remaining, task.total_length, task.remaining_runtime/3600, task.last_runtime, task.last_loss))
+                print("*"*64)
+                for task in self.tasks:
+                    print(task.name + ": Epoch {}, {} / {} minibatches complete, remaining time (approx.): {:.2f}hrs, last runtime: {:.2f}, last loss: {:.2f} | ".format( task.total_epochs - task.epochs, task.total_length - task.batches_remaining, task.total_length, task.remaining_runtime/3600, task.last_runtime, task.last_loss))
                     
                 old_time = timer()
             try:
