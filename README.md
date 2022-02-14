@@ -13,11 +13,6 @@ The files to run the end-to-end tests are twelve_model_task.py and twelve_model_
 
 Please note that running 12-task 8-GPU single node experiments (like the paper) is an expensive operation that demands a great deal of DRAM and continuous, heavy GPU utilization (see debugging section for more details). If you want to run a smaller scale version (2-3 GPUs) just to observe the system, I have also prepared test files with relatively lighter workloads, three-task-lm.py and three-task-vit.py. If you want to setup custom experiments, those files can also serve as guides for the expected format.
 
-
-## Debugging
-
-Expensive multi-task operations can be very demanding on the hardware, and Hydra attempts to maximize utilization at all times. Variance in GPU memory consumption and background operations can cause issues. If you notice in the training output that one task or another seems to have frozen in place (minibatch counter is not advancing) when you expect it to, it is likely that the GPU it is meant to be scheduled to is no longer executing properly. One possible quick-fix is to increase the orchestrator buffer and try again. We are working on ways to improve robustness against such cases (i.e. fail and retry). Fortunately these issues are usually not consistent and can be resolved by a simple retry.
-
 ## Running
 
 The files `examples/single-task-vision.py` and `examples/multi-task-lm.py` demonstrate how to setup a simple training job. A vocab file for BERT and a vision benchmark dataset are also included. 
