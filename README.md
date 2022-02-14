@@ -61,7 +61,8 @@ This system is under development, it will likely change quite a bit in the comin
 
 ## FAQs
 
-** Why do I get Out-of-Memory Errors sometimes? The OOM's are inconsistent, and change depending on my hardware. **
+*** Why do I get Out-of-Memory Errors sometimes? The OOM's are inconsistent, and change depending on my hardware. ***
+
 This is a known issue. The Pilot partitioner (default) attempts to estimate shard memory costs by running sample passes. 
 However, during real execution, minibatch memory costs can and do vary! Occasionally, one minibatch or another causes memory usage peaks
 that create OOM's when combined with the pre-loaded parameters from double-buffering. There are two quick fixes that are possible:
