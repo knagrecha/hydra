@@ -59,6 +59,19 @@ The system is implemented for single-node, multi-GPU execution. I have not imple
 
 This system is under development, it will likely change quite a bit in the coming weeks.
 
+## FAQs
+
+**Why do I get Out-of-Memory Errors sometimes? The OOM's are inconsistent, and change depending on my hardware.**
+
+This is a known issue. The Pilot partitioner (default) attempts to estimate shard memory costs by running sample passes. 
+However, during real execution, minibatch memory costs can and do vary! Occasionally, one minibatch or another causes memory usage peaks
+that create OOM's when combined with the pre-loaded parameters from double-buffering. There are two quick fixes that are possible:
+
+1) (Recommended) Increase the double-buffer space until the shard sizes are reduced. This will reduce per-shard memory costs by increasing the free space guarantee.
+2) Turn off double-buffering (CACHE_SYSTEM flag in ModelOrchestrator). WARNING! This will induce a 1.5-2X slowdown. Use solution 1 if possible.
+
+We are attempting to create a more exact partitioning algorithm to address this issue fully. In the meantime, use the quick fixes.
+
 ## Publications
 If you use this system, please cite the following:
 ```
