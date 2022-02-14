@@ -11,12 +11,7 @@ To install Hydra, follow the [Installation Guide](https://github.com/knagrecha/h
 ## (For VLDB Reviewers)
 The files to run the end-to-end tests are twelve_model_task.py and twelve_model_task_vit.py in the examples folder. 
 
-Please note that running 12-task 8-GPU single node experiments (like the paper) is an expensive operation that demands a great deal of DRAM and continuous, heavy GPU utilization (see debugging section for more details). If you want to run a smaller scale version (2-3 GPUs) just to observe the system, I have also prepared test files with relatively lighter workloads, three-task-lm.py and three-task-vit.py. If you want to setup custom experiments, those files can also serve as guides for the expected format.
-
-
-## Debugging
-
-Expensive multi-task operations can be very demanding on the hardware, and Hydra attempts to maximize utilization at all times. Variance in GPU memory consumption and background operations can cause issues. If you notice in the training output that one task or another seems to have frozen in place (minibatch counter is not advancing) when you expect it to, it is likely that the GPU it is meant to be scheduled to is no longer executing properly. One possible quick-fix is to increase the orchestrator buffer and try again. We are working on ways to improve robustness against such cases (i.e. fail and retry). Fortunately these issues are usually not consistent and can be resolved by a simple retry.
+Please note that running 12-task 8-GPU single node experiments (like the paper) is an expensive operation that demands a great deal of DRAM and continuous, heavy GPU utilization (see FAQ section details). If you want to run a smaller scale version (2-3 GPUs) just to observe the system, I have also prepared test files with relatively lighter workloads, three-task-lm.py and three-task-vit.py. If you want to setup custom experiments, those files can also serve as guides for the expected format.
 
 ## Running
 
@@ -63,6 +58,18 @@ The system is implemented for single-node, multi-GPU execution. I have not imple
 ## NOTE
 
 This system is under development, it will likely change quite a bit in the coming weeks.
+
+## FAQs
+
+** Why do I get Out-of-Memory Errors sometimes? The OOM's are inconsistent, and change depending on my hardware. **
+This is a known issue. The Pilot partitioner (default) attempts to estimate shard memory costs by running sample passes. 
+However, during real execution, minibatch memory costs can and do vary! Occasionally, one minibatch or another causes memory usage peaks
+that create OOM's when combined with the pre-loaded parameters from double-buffering. There are two quick fixes that are possible:
+
+1) (Recommended) Increase the double-buffer space until the shard sizes are reduced. This will reduce per-shard memory costs by increasing the free space guarantee.
+2) Turn off double-buffering (CACHE_SYSTEM flag in ModelOrchestrator). WARNING! This will induce a 1.5-2X slowdown. Use solution 1 if possible.
+
+We are attempting to create a more exact partitioning algorithm to address this issue fully. In the meantime, use the quick fixes.
 
 ## Publications
 If you use this system, please cite the following:
