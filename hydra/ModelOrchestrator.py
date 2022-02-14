@@ -211,6 +211,10 @@ class ModelOrchestrator():
             chosen_shard.time_cost = profile_timer_end - profile_timer_start # time for process running, assuming model is on device.
             #thread_lock.release()
             self.sleep_event.set()
+            
+            print("{} finishes".format(chosen_task.name))
+            print("Free Spaces: {}".format(["{} | ".format(get_free_space(x)) for x in range(torch.cuda.device_count())]))
+            
         except Exception as e:
             traceback.print_exc()
             print(e)
@@ -300,9 +304,10 @@ class ModelOrchestrator():
         old_time = 0
         while len(self.tasks) > 0:
             if (self.verbose == 1 and timer() - old_time > 10):
-                print("*"*64)
-                for task in self.tasks:
-                    print(task.name + ": Epoch {}, {} / {} minibatches complete, remaining time (approx.): {:.2f}hrs, last runtime: {:.2f}, last loss: {:.2f} | ".format( task.total_epochs - task.epochs, task.total_length - task.batches_remaining, task.total_length, task.remaining_runtime/3600, task.last_runtime, task.last_loss))
+                #print("*"*64)
+                #for task in self.tasks:
+                    #print(task.name + ": Epoch {}, {} / {} minibatches complete, remaining time (approx.): {:.2f}hrs, last runtime: {:.2f}, last loss: {:.2f} | ".format( task.total_epochs - task.epochs, task.total_length - task.batches_remaining, task.total_length, task.remaining_runtime/3600, task.last_runtime, task.last_loss))
+                    
                 old_time = timer()
             try:
                 self.sleep_event.wait()
@@ -331,7 +336,7 @@ class ModelOrchestrator():
                     # recalculate cached shards
                     considerables = [x for x in self.idle_tasks if x not in self.cached_tasks]
                     
-                    #print("Devices needing a cache {}".format(temp_active))
+                    print("Devices needing a cache {}".format(temp_active))
                     for active_device in temp_active:
                         
                         active_task = running_tasks[active_device]
@@ -352,7 +357,7 @@ class ModelOrchestrator():
                                 if task_time > lrt:
                                     lrt = task_time
                                     cache_task = i
-                        #print("CACHING {} to {}".format(cache_task.name, active_device))
+                        print("CACHING {} to {}".format(cache_task.name, active_device))
                         if cache_task is not None:
                             if (cache_task.queue_len > 1 and cache_task.my_device != active_device):
                                 cache_task.queue[0].model.to("cuda:{0}".format(active_device), non_blocking=True)

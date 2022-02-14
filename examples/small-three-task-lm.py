@@ -76,12 +76,12 @@ def get_data_loader_train(b_size):
 
     if (path.exists("vocab/torchtext_bert_vocab_wiki.pt")):
         vocab = torch.load("vocab/torchtext_bert_vocab_wiki.pt")
-        dataset = WikiText2(vocab=vocab, split='train') # set to train for real testing.pi
+        dataset = WikiText2(vocab=vocab, split='valid') # set to train for real testing.pi
     else:
-        dataset = WikiText2(split='train') # set to train for real testing.pi
+        dataset = WikiText2(split='valid') # set to train for real testing.pi
         vocab = dataset.get_vocab()
         torch.save(vocab, "vocab/torchtext_bert_vocab_wiki.pt")
-        dataset = WikiText2(vocab = vocab, split='train') # set to train for real testing.pi
+        dataset = WikiText2(vocab = vocab, split='valid') # set to train for real testing.pi
 
 
     dataset.data = torch.cat(tuple(filter(lambda t: t.numel() > 0, dataset)))
@@ -176,9 +176,9 @@ def main():
     
 
     
-    task_0 = ModelTask("Model 0", model_0, pretraining_loss, dataloader_0, 0.001, 4)
-    task_1 = ModelTask("Model 1", model_1, pretraining_loss, dataloader_1, 0.001, 4)
-    task_2 = ModelTask("Model 2", model_2, pretraining_loss, dataloader_2, 0.001, 4)
+    task_0 = ModelTask("Model 0", model_0, pretraining_loss, dataloader_0, 0.001, 1)
+    task_1 = ModelTask("Model 1", model_1, pretraining_loss, dataloader_1, 0.001, 1)
+    task_2 = ModelTask("Model 2", model_2, pretraining_loss, dataloader_2, 0.001, 1)
     
     
 
