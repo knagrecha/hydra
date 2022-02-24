@@ -86,6 +86,10 @@ def tensor_partitioner(layer, batch, device):
             remainder = batch.shape[chosen_dim] % partition_count
             previous_partition = 0
             partition_dimensional_value = 0
+            time_taken_f = []
+            time_taken_b = []
+            partition_time = 0
+            merger_time = 0
             
             for partition_index in range(partition_count):
                 
@@ -119,7 +123,10 @@ def tensor_partitioner(layer, batch, device):
                     
                     
                     print("GENERATING PAD WITH SHAPE: {}".format(padding_values))
-                    pad_layer = torch.nn.ZeroPad2d(padding_values) # replace this with torch.nn.functional pad
+                    pad_layer = torch.nn.ZeroPad2d(padding_values) 
+                    # replace this with torch.nn.functional pad to enable non-zero pad
+                    
+                    start = timer()
                     
                     print("SLICING FROM {} to {}".format(previous_partition, partition_dimensional_value+kernel_extension_latter))
                     slice_array = [slice(None) for x in range(len(batch.shape))]
@@ -130,7 +137,7 @@ def tensor_partitioner(layer, batch, device):
                     
                     previous_partition = partition_dimensional_value
                     
-                    print(partition.shape)
+                    partition_time += timer() - start
                     
                 # right-most/bottom-most/back-most side of image
                 elif partition_index == partition_count - 1:
@@ -143,6 +150,8 @@ def tensor_partitioner(layer, batch, device):
                     print("GENERATING PAD WITH SHAPE: {}".format(padding_values))
                     pad_layer = torch.nn.ZeroPad2d(padding_values) # replace this with torch.nn.functional pad
                     
+                    start = timer()
+                    
                     print("SLICING FROM {} to {}".format(previous_partition-kernel_extension_prior, partition_dimensional_value))
                     slice_array = [slice(None) for x in range(len(batch.shape))]
                     slice_array[chosen_dim] = slice(previous_partition-kernel_extension_prior, None)
@@ -152,7 +161,7 @@ def tensor_partitioner(layer, batch, device):
                     
                     previous_partition = partition_dimensional_value
                     
-                    print(partition.shape)
+                    partition_time += timer() - start
                   
                 # innards of image
                 else:
@@ -166,6 +175,8 @@ def tensor_partitioner(layer, batch, device):
                     print("GENERATING PAD WITH SHAPE: {}".format(padding_values))
                     pad_layer = torch.nn.ZeroPad2d(padding_values) # replace this with torch.nn.functional pad
                     
+                    start = timer()
+                    
                     print("SLICING FROM {} to {}".format(previous_partition-kernel_extension_prior, partition_dimensional_value+kernel_extension_latter))
                     
                     
@@ -175,20 +186,23 @@ def tensor_partitioner(layer, batch, device):
                     print(slice_array)
                     
                     partition = batch[slice_array]
-                    
-                    print(partition.shape)
-                    
+
                     previous_partition = partition_dimensional_value
                     
-                        
+                    partition_time += timer() - start
+              
+                start = timer()
                 
                 partition = move_batch_to_device(partition, device)
-                
+        
                 if (isinstance(partition, tuple) or isinstance(partition, list)):
-                    out = layer(*partition)
+                    out = layer(pad_layer(*partition))
                 else:
-                    out = layer(partition)
-                                 
+                    out = layer(pad_layer(partition))
+                    
+                    
+                time_taken_f.append(timer() - start)
+                start = timer()            
                 grads = []
                 new_out = []
                 if not (isinstance(out, torch.Tensor)):
@@ -210,6 +224,8 @@ def tensor_partitioner(layer, batch, device):
                 del new_out
                 del grads # Gradients are discarded immediately after use
                 
+                time_taken_b.append(timer() - start)
+                
                                
                 # GPU Memory Consumption is complete
                 # if we reach this point we can safely assume the pass is safe. 
@@ -225,7 +241,11 @@ def tensor_partitioner(layer, batch, device):
                 all_outs.append(out)
             
             ##### SUCCESS! #####
-            return all_outs, all_models
+            start = timer()
+            out = torch.cat(all_outs, chosen_dim)
+            merger_time = timer()-start
+            
+            return partition_count, chosen_dim, all_models, out, time_taken_f, time_taken_b, partition_time, merger_time 
             
             
         except Exception as e:

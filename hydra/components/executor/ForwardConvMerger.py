@@ -15,25 +15,16 @@ from hydra.utilities import delete_batch, move_batch_to_device
 import torch
 
 """
-    Generic Forward pass module. Must take as input the model, device, and batch.
-    Returns output batch.
+    Tensor parallel merger module.
 """
 
-class Splitter():
-    def __init__(self, idx):
-        self.type="Splitter"
+class ForwardConvMerger():
+    def __init__(self, idx, chosen_dim):
+        self.type="Merger"
         self.idx = idx
+        self.chosen_dim = chosen_dim
 
     def run(self, model, batch_input, device):
-    
-        old = next(model.parameters()).device
-        model.to(device, non_blocking=True)
-
-        batch_input = move_batch_to_device(batch_input, device)
-        
-        with torch.no_grad() and torch.cuda.amp.autocast():
-            ns_labels = model(batch_input)
-
-        delete_batch(batch_input)
-            
-        return ns_labels
+        return torch.cat(batch_input, dim=self.chosen_dim)
+                    
+                 

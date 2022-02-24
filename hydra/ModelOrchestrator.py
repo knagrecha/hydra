@@ -128,12 +128,13 @@ class ModelOrchestrator():
             if chosen_shard.idx == len(chosen_task.forward_shards)- 1 and chosen_shard.direction == "f":
                 l_f = True
                 
-            # data movement defined by double-buffering
+            # offload data movement defined by double-buffering
             st = timer()
             if (new_batch is not None):
                 if (chosen_task not in self.cached_tasks or chosen_task.queue_len == 1):
                     new_batch = [move_batch_to_device(b, "cpu") for b in new_batch]
-                    chosen_shard.model = chosen_shard.model.to("cpu", non_blocking=True)
+                    if chosen_shard.model is not None:
+                        chosen_shard.model = chosen_shard.model.to("cpu", non_blocking=True)
                 else:
                     next_shard_requests = chosen_task.queue[0].requests
                     batch_indices = None

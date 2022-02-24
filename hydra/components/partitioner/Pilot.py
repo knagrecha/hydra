@@ -22,7 +22,7 @@ import traceback
 
 from .TensorPartitioner import tensor_partitioner
 
-from hydra.components.executor import Forward, ForwardLoss, Backward
+import hydra.components.executor as executor
 
 import math
 
@@ -180,51 +180,75 @@ class Pilot():
                         out = None
                         pioneer_layer = partitioned_layers.pop() # Remove the last added layer
                         pioneer_layer = pioneer_layer.cpu() # Move it back to CPU memory
+                        
                         # We do an end-to-end test on the shard. Discard false intermediate activations.
                         del intermediate_activations
                         intermediate_activations = []
                         
                         if (len(partitioned_layers) == 0):
-                            tensor_partitioner(pioneer_layer, shard_batch_input, self.selected_device)
+                            partition_count, chosen_dim, all_models, out, time_taken_f, time_taken_b, partitioner_time, merger_time = tensor_partitioner(pioneer_layer, 
+                                                                            shard_batch_input, self.selected_device)
+                            
+                            
+                            forward_partition_executor = executor.ForwardConvSplitter(shard_count, 
+                                            partition_count, chosen_dim, layer.kernel_size, layer.padding, layer.stride)
+                            
+                            forward_partitioner_task = ShardedTask(None, forward_partition_executor, 
+                                                                                time_taken, shard_count, lr, {-1})
+                            
+                            
+                            
+                            forward_merger_executor = executor.ForwardConvMerger(shard_count, chosen_dim)
+                            merger_requests = set([-x for x in range(1, partition_count+1)])
+                            
+                            forward_merger_task = ShardedTask(None, forward_merger_executor, 
+                                                                                time_taken, shard_count, lr, merger_requests)
+                            
+                            for model_idx in range(partition_count):
+                                
    
-                        # We do an end-to-end test on the shard. Discard false intermediate activations.
-                        del intermediate_activations
-                        intermediate_activations = []
-                      
-                        oom = False
-
-                        shard_batch_input = move_batch_to_device(shard_batch_input, self.selected_device)
-
-                        start_f = timer() # used for scheduler
-                        model = ShardModel(nn.ModuleList(partitioned_layers)) # Create a shard-model
-                        model.to(self.selected_device)
-                        out = model(shard_batch_input)
-                        end_f = timer()
-                        start_b = timer() # used for scheduler
-
-                        gradients = out.detach().clone()
-                        torch.autograd.backward(out, gradients)
-                        model.zero_grad()
-                        
-                        
-                        del gradients
-
-                        for p in model.parameters():
-                            if p.grad is not None:
-                                del p.grad  # free some memory
-                        model.cpu()  # this is an inplace operation
-
-                        end_b = timer()
-                        
-                        
-                        if not (isinstance(out, torch.Tensor)):
-                            shard_batch_input = [x.cpu().detach().clone() for x in out]
+   
                         else:
-                            shard_batch_input = out.cpu().detach().clone()
-                        
-                        del out
-                        
-                        batch_input = shard_batch_input
+                            oom = False
+
+                            shard_batch_input = move_batch_to_device(shard_batch_input, self.selected_device)
+
+                            start_f = timer() # used for scheduler
+                            model = ShardModel(nn.ModuleList(partitioned_layers)) # Create a shard-model
+                            model.to(self.selected_device)
+                            out = model(shard_batch_input)
+                            end_f = timer()
+                            start_b = timer() # used for scheduler
+
+                            gradients = out.detach().clone()
+                            torch.autograd.backward(out, gradients)
+                            model.zero_grad()
+
+
+                            del gradients
+
+                            for p in model.parameters():
+                                if p.grad is not None:
+                                    del p.grad  # free some memory
+                            model.cpu()  # this is an inplace operation
+
+                            end_b = timer()
+
+
+                            if not (isinstance(out, torch.Tensor)):
+                                shard_batch_input = [x.cpu().detach().clone() for x in out]
+                            else:
+                                shard_batch_input = out.cpu().detach().clone()
+
+                            del out
+
+                            batch_input = shard_batch_input
+                            
+                            # Create new shards
+                            forward_shards.append(ShardedTask(model, executor.Forward(shard_count), 
+                                                                        "f", end_f-start_f, shard_count, lr, {-1}))
+                            backward_shards.append(ShardedTask(model, executor.Backward(shard_count), 
+                                                                        "b", end_b-start_b, shard_count, lr, {-1}))
                         
                     except Exception as e:
                         if ("memory" not in str(e)):
@@ -240,10 +264,6 @@ class Pilot():
                             successful_run = False
 
                 
-           
-                
-                forward_shards.append(ShardedTask(model, Forward(shard_count), "f", end_f-start_f, shard_count, lr, {-1}))
-                backward_shards.append(ShardedTask(model, Backward(shard_count), "b", end_b-start_b, shard_count, lr, {-1}))
                 shard_count+=1
 
                 total_time = total_time + (end_f - start_f) + (end_b - start_b)
@@ -285,8 +305,8 @@ class Pilot():
             model.cpu()  # this is an inplace operation
             end_b = timer()
 
-            forward_shards.append(ShardedTask(model, ForwardLoss(shard_count), "f", end_f - start_f, shard_count, lr, [-1]) )
-            backward_shards.append(ShardedTask(model, Backward(shard_count), "b", end_b - start_b, shard_count, lr, [-1] ))
+            forward_shards.append(ShardedTask(model, executor.ForwardLoss(shard_count), "f", end_f - start_f, shard_count, lr, {-1}) )
+            backward_shards.append(ShardedTask(model, executor.Backward(shard_count), "b", end_b - start_b, shard_count, lr, {-1} ))
 
             total_time = total_time + (end_f - start_f) + (end_b - start_b)
 
