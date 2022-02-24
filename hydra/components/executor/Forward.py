@@ -31,7 +31,7 @@ class Forward():
 
         batch_input = move_batch_to_device(batch_input, device)
         
-        with torch.no_grad() and torch.cuda.amp.autocast():
+        with torch.autograd.graph.save_on_cpu() and torch.cuda.amp.autocast():
             ns_labels = model(batch_input)
 
         delete_batch(batch_input)
