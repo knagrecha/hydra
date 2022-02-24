@@ -60,6 +60,7 @@ class ModelTask():
         self.total_length = len(self._old_data)
         self.queue = []
         self.batches_remaining = len(dataloader)
+        self.saved_entry_points = []
         self.saved_inter_output = []
         self.gradient = None
         self.verbose = 0
