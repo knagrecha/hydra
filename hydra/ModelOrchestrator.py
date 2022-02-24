@@ -95,11 +95,11 @@ class ModelOrchestrator():
                     chosen_task.get_new_batch()
 
             # defining the parameters
-            criterion, back_input, batch, labels = None, None, None, None
+            criterion, back_input, entry_point, batch, labels = None, None, None, None, None
 
             # FORWARD PASS
             if chosen_shard.direction == "f":
-                batch = chosen_task.saved_inter_output
+                batch = chosen_task.saved_inter_output[-1]
                 
                 # FINAL FORWARD
                 if chosen_shard.idx == len(chosen_task.forward_shards)- 1:
@@ -122,8 +122,9 @@ class ModelOrchestrator():
             # BACKWARD PASS       
             else:
                 batch = chosen_task.gradient
-                back_input = chosen_task.saved_entry_points[-1]
-                arg_list = [batch, device, back_input, chosen_task.scaler]
+                entry_point = chosen_task.saved_entry_points[-1]
+                back_input = chosen_task.saved_inter_output[-1]
+                arg_list = [batch, device, back_input, entry_point, chosen_task.scaler]
                 chosen_task.scaler, new_batch_detached = chosen_shard.run(arg_list)
 
             # Hold in place if possible
@@ -137,6 +138,10 @@ class ModelOrchestrator():
             l_f = False
             if chosen_shard.idx == len(chosen_task.forward_shards)- 1 and chosen_shard.direction == "f":
                 l_f = True
+                
+            # if backward pass or l_f update the input point
+            if chosen_shard.direction == "b" or l_f:
+                chosen_task.saved_inter_output.pop()
 
             # if backward pass, update the gradient
             if chosen_shard.direction == "b":
@@ -145,7 +150,7 @@ class ModelOrchestrator():
 
             # if forward, prep it for next pass.
             else:
-                chosen_task.saved_inter_output = new_batch_detached
+                chosen_task.saved_inter_output.append(new_batch_detached)
                 chosen_task.saved_entry_points.append(new_batch)
 
             #thread_lock.acquire()
