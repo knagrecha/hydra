@@ -61,7 +61,7 @@ class ModelTask():
         self.queue = []
         self.batches_remaining = len(dataloader)
         self.saved_entry_points = []
-        self.saved_inter_output = None
+        self.saved_inter_output = []
         self.gradient = None
         self.verbose = 0
 
@@ -172,7 +172,7 @@ class ModelTask():
 
         self.batches_remaining -= 1
         
-        self.saved_inter_output = batch_full[0:len(batch_full)-1]
+        self.saved_inter_output.append(batch_full[0:len(batch_full)-1])
         self.label = batch_full[-1]
         
         self.curr_cycle = 0
