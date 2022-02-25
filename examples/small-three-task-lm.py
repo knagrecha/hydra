@@ -19,10 +19,13 @@ from hydra import ModelTask, ModelOrchestrator
 import customLayers as custom
 import copy
 import torch
-from torchtext.experimental.datasets import WikiText2
+from torchtext.datasets import WikiText2
 from torch.utils.data import DataLoader
 from os import path
 from timeit import timeit as timer
+from torchtext.data.utils import get_tokenizer
+from torchtext.vocab import build_vocab_from_iterator
+
 
 """
     Preprocessing functions for the dataloaders.
@@ -69,29 +72,28 @@ def pretraining_loss(out, targets):
     Helper function to create a training dataloader.
 """
 
+def data_process(raw_text_iter, vocab, tokenizer):
+    """Converts raw text into a flat Tensor."""
+    data = [torch.tensor(vocab(tokenizer(item)), dtype=torch.long) for item in raw_text_iter]
+    return torch.cat(tuple(filter(lambda t: t.numel() > 0, data)))
+
+
 def get_data_loader_train(b_size):
     start = timer()
     print("\nPreparing to load dataset....")
-
-
-    if (path.exists("vocab/torchtext_bert_vocab_wiki.pt")):
-        vocab = torch.load("vocab/torchtext_bert_vocab_wiki.pt")
-        dataset = WikiText2(vocab=vocab, split='train') # set to train for real testing.pi
-    else:
-        dataset = WikiText2(split='train') # set to train for real testing.pi
-        vocab = dataset.get_vocab()
-        torch.save(vocab, "vocab/torchtext_bert_vocab_wiki.pt")
-        dataset = WikiText2(vocab = vocab, split='train') # set to train for real testing.pi
-
-
-    dataset.data = torch.cat(tuple(filter(lambda t: t.numel() > 0, dataset)))
-
-    mask_id = vocab.stoi['<MASK>']
-    cls_id = vocab.stoi['<cls>']
+    dataset = WikiText2(split="train")
+    tokenizer = get_tokenizer('basic_english')
+    vocab = build_vocab_from_iterator(map(tokenizer, dataset), specials=['<MASK>', '<CLS>'])
+    
+    vocab.set_default_index(vocab['<unk>'])
+    stoi = vocab.get_stoi()  
+    mask_id = stoi['<MASK>']
+    cls_id = stoi['<CLS>']
     bptt = 128
     mask_frac = 0.15
     end = timer()
-    dataset = process_raw_data(dataset.data, b_size, bptt)
+    dataset = WikiText2(split="train")
+    dataset = data_process(dataset, vocab, tokenizer) 
     print("Dataset Loaded in {} seconds.".format(end-start))
 
 

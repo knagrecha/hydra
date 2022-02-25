@@ -47,7 +47,7 @@ class ForwardLoss():
                 batch_input.requires_grad_(True)
 
 
-        with torch.cuda.amp.autocast():
+        with torch.autograd.set_detect_anomaly(True) and torch.cuda.amp.autocast():
             ns_labels = model(batch_input)
             loss = criterion(ns_labels, labels)
 
@@ -81,6 +81,5 @@ class ForwardLoss():
 
         del labels
 
-        delete_batch(batch_input)
 
         return scaler, pass_back_gradients, loss.item()

@@ -142,14 +142,14 @@ class ModelOrchestrator():
             # if backward pass or l_f update the input point
             if chosen_shard.direction == "b" or l_f:
                 chosen_task.saved_inter_output.pop()
+                chosen_task.gradient = new_batch_detached
 
-            # if backward pass, update the gradient
+            # if backward pass, update the backprop item
             if chosen_shard.direction == "b":
-                chosen_task.gradient = my_batch
                 chosen_task.saved_entry_points.pop()
 
             # if forward, prep it for next pass.
-            else:
+            elif not l_f:
                 chosen_task.saved_inter_output.append(new_batch_detached)
                 chosen_task.saved_entry_points.append(new_batch)
 

@@ -31,22 +31,6 @@ class Backward():
         model.zero_grad()  # zeroes the gradient buffers of all parameters
         optimizer.zero_grad()  # zero the gradient buffers
 
-        # Pass Back Input
-        if not isinstance(back_input, torch.Tensor):
-            #print("Back input is a list")
-            back_input = [x.to(device, non_blocking=True) for x in back_input]
-
-            if self.idx != 0:
-                for m_input in back_input:
-                    #print(m_input)
-                    if isinstance(m_input, torch.Tensor):
-                        m_input.requires_grad_(True)
-
-        else:
-            back_input = back_input.to(device, non_blocking=True)
-            if self.idx != 0:
-                back_input.requires_grad_(True)     
-
         # Gradients
         if not isinstance(batch_input, torch.Tensor):
             batch_input = [x.to(device, non_blocking=True) for x in batch_input]
@@ -59,8 +43,8 @@ class Backward():
         else:
             entry_point = entry_point.to(device, non_blocking=True) 
 
-
-        torch.autograd.backward(entry_point, batch_input)
+        with torch.autograd.set_detect_anomaly(True) and torch.cuda.amp.autocast():
+            torch.autograd.backward(entry_point, batch_input)
         del toy_output
         del batch_input
         pass_back_gradients = None

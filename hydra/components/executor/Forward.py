@@ -28,12 +28,26 @@ class Forward():
     
         old = next(model.parameters()).device
         model.to(device, non_blocking=True)
-
-        batch_input = move_batch_to_device(batch_input, device)
         
-        with torch.autograd.graph.save_on_cpu() and torch.cuda.amp.autocast():
+        # Pass Back Input
+        if not isinstance(batch_input, torch.Tensor):
+            #print("Back input is a list")
+            batch_input = [x.to(device, non_blocking=True) for x in batch_input]
+
+            if self.idx != 0:
+                for m_input in batch_input:
+                    #print(m_input)
+                    if isinstance(m_input, torch.Tensor):
+                        m_input.requires_grad_(True)
+
+        else:
+            batch_input = batch_input.to(device, non_blocking=True)
+            if self.idx != 0:
+                batch_input.requires_grad_(True)    
+
+
+        with torch.autograd.set_detect_anomaly(True) and torch.autograd.graph.save_on_cpu() and torch.cuda.amp.autocast():
             ns_labels = model(batch_input)
 
-        delete_batch(batch_input)
-            
+
         return ns_labels
