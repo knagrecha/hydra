@@ -43,19 +43,16 @@ class Backward():
         else:
             entry_point = entry_point.to(device, non_blocking=True) 
 
-        with torch.autograd.set_detect_anomaly(True) and torch.cuda.amp.autocast():
+        with torch.cuda.amp.autocast():
             torch.autograd.backward(entry_point, batch_input)
-        del toy_output
+
         del batch_input
         pass_back_gradients = None
         if self.idx != 0: # the first backwards pass need not compute back pass gradients.
-            if (not isinstance(toy_input, torch.Tensor)):
-                pass_back_gradients = [i.grad for i in toy_input]
-                for m_input in toy_input:
-                    m_input.requires_grad_(False)
+            if (not isinstance(back_input, torch.Tensor)):
+                pass_back_gradients = [i.grad for i in back_input]
             else:
-                pass_back_gradients = toy_input.grad
-                toy_input.requires_grad_(False)
+                pass_back_gradients = back_input.grad             
             # the user will pass in what WAS the input for this stage!
         if scaler is not None:
             scaler.step(optimizer)
@@ -64,13 +61,12 @@ class Backward():
             optimizer.step()
             optimizer.zero_grad()
 
-
-        if not isinstance(toy_input, torch.Tensor):
-            while (len(toy_input) > 0):
-                del toy_input[0]
-            del toy_input
+        if isinstance(back_input, list):
+            while (len(back_input) > 0):
+                del back_input[0]
+            del back_input
         else:
-            del toy_input
+            del back_input
 
         model.zero_grad()
 

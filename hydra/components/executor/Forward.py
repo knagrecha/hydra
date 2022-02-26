@@ -46,7 +46,7 @@ class Forward():
                 batch_input.requires_grad_(True)    
 
 
-        with torch.autograd.set_detect_anomaly(True) and torch.autograd.graph.save_on_cpu() and torch.cuda.amp.autocast():
+        with torch.autograd.graph.save_on_cpu() and torch.cuda.amp.autocast():
             ns_labels = model(batch_input)
 
 

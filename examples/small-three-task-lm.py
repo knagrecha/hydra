@@ -193,7 +193,7 @@ def main():
      The Double-Buffer. Adjusting this up or down a bit can help to address minor
      errors in partitioning memory consumption.
     """
-    orchestra.buffer = 10000
+    orchestra.buffer = 15000
 
     orchestra.generate()
     orchestra.train_models()
