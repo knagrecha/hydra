@@ -176,8 +176,10 @@ class ModelOrchestrator():
                 inter_mods = []
                 
                 for req in chosen_shard.requests:
-                    grad_mods.append(req if req >= 0 else req + len(chosen_task.gradients))
                     inter_mods.append(req if req >= 0 else req + len(chosen_task.saved_inter_output))
+                    
+                for grad_req in chosen_shard.backward_requests:
+                    grad_mods.append(grad_req if grad_req >= 0 else grad_req + len(chosen_task.gradients))
                 
                 for i in sorted(grad_mods, reverse=True):
                     del chosen_task.gradients[i]

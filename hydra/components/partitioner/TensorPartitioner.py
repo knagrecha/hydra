@@ -21,7 +21,7 @@ from hydra.components.partitioner.containers import ShardModel, ShardedTask
 import traceback
 
 from hydra.components.executor import Forward, ForwardLoss, Backward
-
+import copy
 
 import math
 
@@ -69,11 +69,15 @@ def tensor_partitioner(layer, batch, device):
     print("PRIOR EXTENSION FOR SAME DIM OUTPUT: {}".format(kernel_extension_prior))
     print("LATTER EXTENSION FOR SAME DIM OUTPUT: {}".format(kernel_extension_latter))
     
-    
+    layer_padding = copy.deepcopy(layer.padding)
+    layer.padding = 0
+    flipped_dimension = len(layer_padding) - 1 - (chosen_dim)
     chosen_dim += 2 # offset for B, C dims
     
+    
+    
     while not successful_pass:
-        print("Attempting {}-fold partitioning".format(partition_count))
+        print("Attempting {}-fold partitioning on dimensions: {}".format(partition_count, chosen_dim))
         try:
             
             
@@ -92,6 +96,7 @@ def tensor_partitioner(layer, batch, device):
             merger_time = 0
             
             for partition_index in range(partition_count):
+                print("PREVIOUS PARTITION ENDED AT: {}".format(previous_partition))
                 
                 
                 if (partition_index) < remainder:
@@ -110,16 +115,26 @@ def tensor_partitioner(layer, batch, device):
 
                 """
                 
+                # NOTE: 
+                # Strange PyTorch standard:
+                # Input: N, C, H, W
+                # Pad: Wr, Wl, Ht, Hb
+                
+                # Basically padding values.
+                
+                
                 partition = None
                 pad_layer = None
                 
+                
+
                 # left-most/top-most/forward-most side of image
                 if partition_index == 0:
                     padding_values = []
-                    for pad_val in layer.padding:
+                    for pad_val in layer_padding:
                         padding_values.append(pad_val)
                         padding_values.append(pad_val)
-                    padding_values[ (chosen_dim-2) * 2 + 1] = 0
+                    padding_values[ flipped_dimension * 2 + 1] = 0
                     
                     
                     print("GENERATING PAD WITH SHAPE: {}".format(padding_values))
@@ -142,10 +157,10 @@ def tensor_partitioner(layer, batch, device):
                 # right-most/bottom-most/back-most side of image
                 elif partition_index == partition_count - 1:
                     padding_values = []
-                    for pad_val in layer.padding:
+                    for pad_val in layer_padding:
                         padding_values.append(pad_val)
                         padding_values.append(pad_val)
-                    padding_values[ (chosen_dim-2) * 2] = 0
+                    padding_values[ flipped_dimension * 2] = 0
                     
                     print("GENERATING PAD WITH SHAPE: {}".format(padding_values))
                     pad_layer = torch.nn.ZeroPad2d(padding_values) # replace this with torch.nn.functional pad
@@ -156,7 +171,7 @@ def tensor_partitioner(layer, batch, device):
                     slice_array = [slice(None) for x in range(len(batch.shape))]
                     slice_array[chosen_dim] = slice(previous_partition-kernel_extension_prior, None)
                     slice_array = tuple(slice_array)
-                    print(slice_array)
+                    #print(slice_array)
                     partition = batch[slice_array]
                     
                     previous_partition = partition_dimensional_value
@@ -166,11 +181,11 @@ def tensor_partitioner(layer, batch, device):
                 # innards of image
                 else:
                     padding_values = []
-                    for pad_val in layer.padding:
+                    for pad_val in layer_padding:
                         padding_values.append(pad_val)
                         padding_values.append(pad_val)
-                    padding_values[ (chosen_dim-2) * 2] = 0
-                    padding_values[ (chosen_dim-2) * 2 + 1] = 0
+                    padding_values[ flipped_dimension * 2] = 0
+                    padding_values[ flipped_dimension * 2 + 1] = 0
                     
                     print("GENERATING PAD WITH SHAPE: {}".format(padding_values))
                     pad_layer = torch.nn.ZeroPad2d(padding_values) # replace this with torch.nn.functional pad
@@ -183,7 +198,6 @@ def tensor_partitioner(layer, batch, device):
                     slice_array = [slice(None) for x in range(len(batch.shape))]
                     slice_array[chosen_dim] = slice(previous_partition-kernel_extension_prior, partition_dimensional_value+kernel_extension_latter)
                     slice_array = tuple(slice_array)
-                    print(slice_array)
                     
                     partition = batch[slice_array]
 
@@ -192,15 +206,21 @@ def tensor_partitioner(layer, batch, device):
                     partition_time += timer() - start
               
                 start = timer()
-                
+                print("PARTITION SHAPE: {}".format(partition.shape))
                 partition = move_batch_to_device(partition, device)
         
                 if (isinstance(partition, tuple) or isinstance(partition, list)):
-                    out = layer(pad_layer(*partition))
+                    out = pad_layer(*partition)
+                    print("PAD OUTPUT SHAPE: {}".format(out.shape))
+                    out = layer(out)
+                    print("LAYER OUTPUT SHAPE: {}".format(out.shape))
                 else:
-                    out = layer(pad_layer(partition))
+                    out = pad_layer(partition)
+                    print("PAD OUTPUT SHAPE: {}".format(out.shape))
+                    out = layer(out)
+                    print("LAYER OUTPUT SHAPE: {}".format(out.shape))
                     
-                    
+                
                 time_taken_f.append(timer() - start)
                 start = timer()            
                 grads = []
@@ -256,10 +276,9 @@ def tensor_partitioner(layer, batch, device):
             
             
         except Exception as e:
-            print(traceback.format_exc())
             print(e)
             partition_count += 1
-            if (partition_count == 10):
+            if (partition_count == 12):
                 raise e
         
     

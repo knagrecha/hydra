@@ -30,7 +30,7 @@ import torch
 
 class ShardedTask():
 
-    def __init__(self, model, executor, direction, time_taken, idx, lr, requests, *args):
+    def __init__(self, model, executor, direction, time_taken, idx, lr, requests, backward_requests=None, *args):
         self.lr = lr
         self.model = model
         self.direction = direction
@@ -38,6 +38,10 @@ class ShardedTask():
         self.idx = idx
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr = self.lr)
         self.executor = executor
+        if backward_requests is None:
+            self.backward_requests = requests
+        else:
+            self.backward_requests = requests
         
         self.requests = requests
         
