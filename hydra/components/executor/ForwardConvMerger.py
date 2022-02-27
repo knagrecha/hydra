@@ -25,6 +25,7 @@ class ForwardConvMerger():
         self.chosen_dim = chosen_dim
 
     def run(self, model, batch_input, device):
-        return torch.cat(batch_input, dim=self.chosen_dim)
+        with torch.no_grad():
+            return torch.cat(batch_input, dim=self.chosen_dim)
                     
                  

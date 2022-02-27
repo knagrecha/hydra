@@ -103,13 +103,19 @@ class Pilot():
             
         while partitioning_index < (len(all_layers)):
             
-            batch_input = move_batch_to_device(batch_input, self.selected_device)      
-            #print(get_free_space(self.selected_device_index))
+            torch.cuda.empty_cache()
+            print(get_free_space(self.selected_device_index))
+                
             oom = False
+            if verbose == 1:
+                print("| Splits: {} | Layer Index: {} | Memory {} |".format(partition_indices, partitioning_index, get_free_space(self.selected_device_index)))
+                    
           
             try:
-                
+                batch_input = move_batch_to_device(batch_input, self.selected_device)      
+                print("Batch moved")
                 all_layers[partitioning_index] = all_layers[partitioning_index].to(self.selected_device)
+                print("Layer moved")
                 partitioned_layers.append(all_layers[partitioning_index])
 
                 if (isinstance(batch_input, tuple) or isinstance(batch_input, list)):
@@ -143,9 +149,7 @@ class Pilot():
                 del grads # Gradients are discarded immediately after use
                 intermediate_activations.append(out) # Add the output of this layer as an intermediate activation
                 
-                if verbose == 1:
-                    print("| Splits: {} | Layer Index: {} | Memory {} |".format(partition_indices, partitioning_index, get_free_space(self.selected_device_index)))
-                    
+               
                     
                 
                 # GPU Memory Consumption is complete
@@ -174,20 +178,36 @@ class Pilot():
                 roll_back_count = 0
                 while not successful_run:
                     try:
-                        roll_back_count += 1
+                        
                         successful_run = True
                         batch_input = None
                         out = None
-                        pioneer_layer = partitioned_layers.pop() # Remove the last added layer
-                        pioneer_layer = pioneer_layer.cpu() # Move it back to CPU memory
+                        if (len(partitioned_layers) > 0):
+                            pioneer_layer = partitioned_layers.pop() # Remove the last added layer
+                            pioneer_layer = pioneer_layer.cpu() # Move it back to CPU memory
                         
                         # We do an end-to-end test on the shard. Discard false intermediate activations.
                         del intermediate_activations
                         intermediate_activations = []
                         
                         if (len(partitioned_layers) == 0):
+                            pioneer_layer = all_layers[partitioning_index]
+                            
                             partition_count, chosen_dim, all_models, out, time_taken_f, time_taken_b, partitioner_time, merger_time, cut_points = tensor_partitioner(pioneer_layer, 
                                                                             shard_batch_input, self.selected_device)
+                            
+                            
+                            if not (isinstance(out, torch.Tensor)):
+                                shard_batch_input = [x.cpu().detach().clone() for x in out]
+                            else:
+                                shard_batch_input = out.cpu().detach().clone()
+
+                            del out
+
+                            batch_input = shard_batch_input
+                            
+                            
+                            
                             
                             
                             """
@@ -226,9 +246,9 @@ class Pilot():
                             # i.e. this is the last layer (output/labels are too big)
                             if partitioning_index == (len(all_layers)) - 1:
                                 for model_idx in range(partition_count):
-                                    
+
                                     # compute a local loss!
-                                    slice_array = [slice(None) for x in range(len(batch.shape))]
+                                    slice_array = [slice(None) for x in range(len(shard_batch_input.shape))]
                                     if (model_idx == 0):
                                         slice_array[chosen_dim] = slice(None, cut_points[model_idx])
                                     elif (model_idx == len(cut_points) - 1):
@@ -239,7 +259,7 @@ class Pilot():
                                     
                                     forward_partition_shards.insert(1, ShardedTask(all_models[model_idx], 
                                                                         executor.ForwardSplitterLoss(shard_count, slice_array), 
-                                                                        "f", time_taken_f[model_idx] + time_taken_b[model_idx], lr, {-1}))
+                                                                        "f", time_taken_f[model_idx] + time_taken_b[model_idx], shard_count, lr, {-1}))
                                     # Creates a shard requesting input of -1. 
                                     # Keep in mind that gradients are inserted to the front of the queue.
                                     # to maintain the correct order corresponding to the original input (not mirrored)
@@ -247,19 +267,21 @@ class Pilot():
                                     # for merge are in left-first right-last order.
                                     # essentially this identical to a backward pass structure except we can't afford to call
                                     # the reverse operation we would normally.
+                                    
+                                    total_time = total_time + partitioner_time*2 + sum(time_taken_f) + sum(time_taken_b)
 
                             else:
                                 for model_idx in range(partition_count):
                                     forward_partition_shards.append(ShardedTask(all_models[model_idx], 
                                                                         executor.Forward(shard_count), 
-                                                                        "f", time_taken_f[model_idx], lr, {-partition_count}))
+                                                                        "f", time_taken_f[model_idx], shard_count, lr, {-partition_count}))
                                     # Creates a shard requesting input of - partition_count. Keep in mind that the forward
                                     # going queue will be appended to by each shard, so the offset is consistent each time.
 
 
                                     backward_partition_shards.append(ShardedTask(all_models[model_idx], 
                                                                         executor.Backward(shard_count), 
-                                                                        "b", time_taken_b[model_idx], lr, {-1}))
+                                                                        "b", time_taken_b[model_idx], shard_count, lr, {-1}))
                                     # Creates a shard requesting input of -1. Keep in mind that the backward
                                     # going queue will delete as it goes, so the offset is consistent each time.
 
@@ -284,13 +306,20 @@ class Pilot():
 
                                 forward_partition_shards.append(forward_merger_task) # happens last
                                 backward_partition_shards.append(backward_partitioner_task) # happens first
+                                
+                                total_time = total_time + partitioner_time*2 + merger_time*2 + sum(time_taken_f) + sum(time_taken_b)
 
                             forward_shards.extend(forward_partition_shards)
                             backward_shards.extend(backward_partition_shards)
+                            
+                            
+                            
                             print("Tensor partitioning cycle complete!")
-   
+                            partitioning_index += 1
+                    
                         else:
                             oom = False
+                            roll_back_count += 1
 
                             shard_batch_input = move_batch_to_device(shard_batch_input, self.selected_device)
 
@@ -335,6 +364,9 @@ class Pilot():
                                                                             "f", end_f-start_f, shard_count, lr, {-1}))
                                 backward_shards.append(ShardedTask(model, executor.Backward(shard_count), 
                                                                             "b", end_b-start_b, shard_count, lr, {-1}))
+                                
+                                
+                            total_time = total_time + (end_f - start_f) + (end_b - start_b)
                         
                     except Exception as e:
                         if ("memory" not in str(e)):
@@ -351,11 +383,9 @@ class Pilot():
 
                 
                 shard_count+=1
-
-                total_time = total_time + (end_f - start_f) + (end_b - start_b)
                 partitioned_layers = []
-                
                 partitioning_index -= roll_back_count # Return to partitioning from the appropriate location
+                print("PARTITIONING SUCCESSFUL!")
                 partition_indices.append(partitioning_index) # Record partition location
 
                 

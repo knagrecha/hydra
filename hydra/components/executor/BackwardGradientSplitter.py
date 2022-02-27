@@ -28,24 +28,25 @@ class BackwardGradientSplitter():
         self.cut_points = cut_points
 
     def run(self, model, batch_input, device):
-        
-        # Splitter recives single batch input
-        batch_input = batch_input[0]
-        
-        for idx, cut_point in enumerate(self.cut_points):
-            partition = None
-            slice_array = [slice(None) for x in range(len(batch.shape))]
-            if (idx == 0):
-                slice_array[chosen_dim] = slice(None, cut_point)
-            elif (idx == len(self.cut_points) - 1):
-                slice_array[chosen_dim] = slice(cut_point, None)
-            else:
-                slice_array[chosen_dim] = slice(self.cut_points[idx-1], cut_point)
-            slice_array = tuple(slice_array)
-            partition = batch[slice_array]
-            partitions.append(partition) # partitions are being generated!
-            
-            
-        return partitions
+        with torch.no_grad():
+
+            # Splitter recives single batch input
+            batch_input = batch_input[0]
+
+            for idx, cut_point in enumerate(self.cut_points):
+                partition = None
+                slice_array = [slice(None) for x in range(len(batch.shape))]
+                if (idx == 0):
+                    slice_array[chosen_dim] = slice(None, cut_point)
+                elif (idx == len(self.cut_points) - 1):
+                    slice_array[chosen_dim] = slice(cut_point, None)
+                else:
+                    slice_array[chosen_dim] = slice(self.cut_points[idx-1], cut_point)
+                slice_array = tuple(slice_array)
+                partition = batch[slice_array]
+                partitions.append(partition) # partitions are being generated!
+
+
+            return partitions
                     
                  

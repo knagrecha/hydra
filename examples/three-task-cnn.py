@@ -30,6 +30,8 @@ from einops.layers.torch import Rearrange
 
 
 
+def custom_loss(pred, target):
+    return torch.sum(pred - torch.ones_like(pred))
 
 """
     Helper function to create a training dataloader.
@@ -40,8 +42,7 @@ def get_data_loader_train(b_size):
     print("\nPreparing to load dataset....")
 
     transform = transforms.Compose( [transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-    dataset = FakeData(size=100, image_size=(3, 1100, 1100), num_classes=100, transform=transform)
-
+    dataset = FakeData(size=100, image_size=(3, 1100, 1100), num_classes=1, transform=transform)
     return torch.utils.data.DataLoader(dataset, batch_size=b_size)
 
 
@@ -52,9 +53,6 @@ def get_model(depth):
     for i in range(depth):
         modules.append(torch.nn.Conv2d(in_channels=3, out_channels=3, kernel_size=3, stride=1, padding=(1,1)))
 
-    modules.append(nn.Flatten())
-    modules.append(nn.Linear(3000000, 100))
-
     return nn.Sequential(*modules)
  
 """
@@ -62,19 +60,19 @@ def get_model(depth):
 """
 def main():
     
-    model_0 = get_model(24) 
-    model_1 = get_model(36) # 800M params
-    model_2 = get_model(48)
+    model_0 = get_model(2) 
+    model_1 = get_model(2) # 800M params
+    #model_2 = get_model(2)
     
     params = sum(p.numel() for p in model_0.parameters())
     print("Total parameters: {}".format(params))
 
-    task_0 = ModelTask("Model 0", model_0, nn.CrossEntropyLoss(), get_data_loader_train(128), 0.001, 5)    
-    task_1 = ModelTask("Model 1", model_1, nn.CrossEntropyLoss(), get_data_loader_train(128), 0.001, 5)
-    task_2 = ModelTask("Model 2", model_2, nn.CrossEntropyLoss(), get_data_loader_train(128), 0.001, 5)
+    task_0 = ModelTask("Model 0", model_0, custom_loss, get_data_loader_train(100), 0.001, 5)    
+    task_1 = ModelTask("Model 1", model_1, custom_loss, get_data_loader_train(100), 0.001, 5)
+    #task_2 = ModelTask("Model 2", model_2, nn.CrossEntropyLoss(), get_data_loader_train(128), 0.001, 5)
     
     # create orchestrator
-    orchestra = ModelOrchestrator([task_0, task_1, task_2])
+    orchestra = ModelOrchestrator([task_0, task_1])
     orchestra.verbose = 1
 
     """

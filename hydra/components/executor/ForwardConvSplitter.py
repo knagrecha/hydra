@@ -13,6 +13,7 @@
 
 from hydra.utilities import delete_batch, move_batch_to_device
 import torch
+import math
 
 """
     Tensor parallel splitter module.
@@ -23,67 +24,69 @@ class ForwardConvSplitter():
         self.type="Splitter"
         self.idx = idx
         self.split_count = split_count
+        
+        self.kernel_extension_prior = math.floor((kernel_size[chosen_dim-2]-1) / 2)
+        self.kernel_extension_latter = math.ceil((kernel_size[chosen_dim-2]-1) / 2)
         self.chosen_dim = chosen_dim
-        self.kernel_extension_prior = math.floor((layer.kernel_size[chosen_dim]-1) / 2)
-        self.kernel_extension_latter = math.ceil((layer.kernel_size[chosen_dim]-1) / 2)
 
     def run(self, model, batch_input, device):
-        
-        # Splitter recives single batch input
-        batch_input = batch_input[0]
-        
-        remainder = batch_input.shape[self.chosen_dim] % self.split_count
-        previous_partition = 0
-        partition_dimensional_value = 0
-        
-        partitions = []
-        
-        for partition_index in range(self.split_count):
-            
-            # This code produces roughly even partition points
-            
-            if (partition_index) < remainder:
-                partition_dimensional_value += math.floor(batch.shape[chosen_dim] / partition_count) + 1
-            else:
-                partition_dimensional_value += math.floor(batch.shape[chosen_dim] / partition_count)
+        with torch.no_grad():
 
-               
-            partition = None
+            # Splitter recives single batch input
+            batch_input = batch_input[0]
 
-            # left-most/top-most/forward-most side of image
-            if partition_index == 0:
-                print("SLICING FROM {} to {}".format(previous_partition, partition_dimensional_value+kernel_extension_latter))
-                slice_array = [slice(None) for x in range(len(batch.shape))]
-                slice_array[chosen_dim] = slice(None, partition_dimensional_value+kernel_extension_latter)
-                slice_array = tuple(slice_array)
-                partition = batch[slice_array]
-                previous_partition = partition_dimensional_value
+            remainder = batch_input.shape[self.chosen_dim] % self.split_count
+            previous_partition = 0
+            partition_dimensional_value = 0
 
-            # right-most/bottom-most/back-most side of image
-            elif partition_index == partition_count - 1:
-                print("SLICING FROM {} to {}".format(previous_partition-kernel_extension_prior, partition_dimensional_value))
-                slice_array = [slice(None) for x in range(len(batch.shape))]
-                slice_array[chosen_dim] = slice(previous_partition-kernel_extension_prior, None)
-                slice_array = tuple(slice_array)
-                partition = batch[slice_array]
+            partitions = []
 
-                previous_partition = partition_dimensional_value
-                
-            # innards of image
-            else:
-                print("SLICING FROM {} to {}".format(previous_partition-kernel_extension_prior, partition_dimensional_value+kernel_extension_latter))
+            for partition_index in range(self.split_count):
+
+                # This code produces roughly even partition points
+
+                if (partition_index) < remainder:
+                    partition_dimensional_value += math.floor(batch.shape[chosen_dim] / partition_count) + 1
+                else:
+                    partition_dimensional_value += math.floor(batch.shape[chosen_dim] / partition_count)
 
 
-                slice_array = [slice(None) for x in range(len(batch.shape))]
-                slice_array[chosen_dim] = slice(previous_partition-kernel_extension_prior, partition_dimensional_value+kernel_extension_latter)
-                slice_array = tuple(slice_array)
-                
-                partition = batch[slice_array]
-                previous_partition = partition_dimensional_value
-            
-            partitions.append(partition) # partitions are being generated!
-            
-            
-        return partitions
+                partition = None
+
+                # left-most/top-most/forward-most side of image
+                if partition_index == 0:
+                    print("SLICING FROM {} to {}".format(previous_partition, partition_dimensional_value+kernel_extension_latter))
+                    slice_array = [slice(None) for x in range(len(batch.shape))]
+                    slice_array[chosen_dim] = slice(None, partition_dimensional_value+kernel_extension_latter)
+                    slice_array = tuple(slice_array)
+                    partition = batch[slice_array]
+                    previous_partition = partition_dimensional_value
+
+                # right-most/bottom-most/back-most side of image
+                elif partition_index == partition_count - 1:
+                    print("SLICING FROM {} to {}".format(previous_partition-kernel_extension_prior, partition_dimensional_value))
+                    slice_array = [slice(None) for x in range(len(batch.shape))]
+                    slice_array[chosen_dim] = slice(previous_partition-kernel_extension_prior, None)
+                    slice_array = tuple(slice_array)
+                    partition = batch[slice_array]
+
+                    previous_partition = partition_dimensional_value
+
+                # innards of image
+                else:
+                    print("SLICING FROM {} to {}".format(previous_partition-kernel_extension_prior, partition_dimensional_value+kernel_extension_latter))
+
+
+                    slice_array = [slice(None) for x in range(len(batch.shape))]
+                    slice_array[chosen_dim] = slice(previous_partition-kernel_extension_prior, partition_dimensional_value+kernel_extension_latter)
+                    slice_array = tuple(slice_array)
+
+                    partition = batch[slice_array]
+                    previous_partition = partition_dimensional_value
+
+                partitions.append(partition) # partitions are being generated!
+
+
+            return partitions
                     
                  

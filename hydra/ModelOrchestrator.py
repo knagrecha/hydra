@@ -360,7 +360,8 @@ class ModelOrchestrator():
                         print("CACHING {} to {}".format(cache_task.name, active_device))
                         if cache_task is not None:
                             if (cache_task.queue_len > 1 and cache_task.my_device != active_device):
-                                cache_task.queue[0].model.to("cuda:{0}".format(active_device), non_blocking=True)
+                                if (cache_task.queue[0].model is not None):
+                                    cache_task.queue[0].model.to("cuda:{0}".format(active_device), non_blocking=True)
 
                             self.cached_tasks[active_device] = cache_task
                             if cache_task in considerables:

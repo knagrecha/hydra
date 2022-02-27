@@ -36,7 +36,10 @@ class ShardedTask():
         self.direction = direction
         self.time_cost = time_taken
         self.idx = idx
-        self.optimizer = torch.optim.SGD(self.model.parameters(), lr = self.lr)
+        if self.model is not None:
+            self.optimizer = torch.optim.SGD(self.model.parameters(), lr = self.lr)
+        else:
+            self.optimizer = None
         self.executor = executor
         if backward_requests is None:
             self.backward_requests = requests

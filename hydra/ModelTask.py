@@ -25,7 +25,8 @@ from hydra.components.partitioner import Pilot
 def get_load_time(shard, a, device):
     b = a[:-1]
     b = [d.to(device) for d in b]
-    shard.model.to(device)
+    if shard.model is not None:
+        shard.model.to(device)
     for idx, i in enumerate(b):
         b[idx] = i.cpu()
     for idx, i in enumerate(b):
@@ -144,19 +145,18 @@ class ModelTask():
             start = timer()
             get_load_time(shard, a, device)
             self.list_of_waste.append(timer() - start)
-            shard.model = shard.model.cpu()
+            if shard.model is not None:
+                shard.model = shard.model.cpu()
         print(self.list_of_waste)
         
         self.queue_len = len(self.queue)
      
     def setup_timing(self, device):
-        
-        if (next(self.queue[0].model.parameters()).device == torch.device(device)):
+        if (self.queue[0].model is not None and next(self.queue[0].model.parameters()).device == torch.device(device)):
             self.anticipated_curr_shard_time = timer() - self.global_timer + self.queue[0].time_cost
-            self.my_device = device
         else:
             self.anticipated_curr_shard_time = timer() - self.global_timer + self.queue[0].time_cost + self.list_of_waste[self.curr_cycle]
-            self.my_device = device
+        self.my_device = device
             
     def get_new_batch(self):
         self.last_runtime = timer()-self.last_mini_time
