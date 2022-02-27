@@ -21,7 +21,7 @@ import torch
 
 class BackwardGradientSplitter():
     def __init__(self, idx, split_count, chosen_dim, cut_points):
-        self.type="Splitter"
+        self.type="Backward"
         self.idx = idx
         self.split_count = split_count
         self.chosen_dim = chosen_dim
@@ -35,7 +35,7 @@ class BackwardGradientSplitter():
 
             for idx, cut_point in enumerate(self.cut_points):
                 partition = None
-                slice_array = [slice(None) for x in range(len(batch.shape))]
+                slice_array = [slice(None) for x in range(len(batch_input.shape))]
                 if (idx == 0):
                     slice_array[chosen_dim] = slice(None, cut_point)
                 elif (idx == len(self.cut_points) - 1):
@@ -43,7 +43,7 @@ class BackwardGradientSplitter():
                 else:
                     slice_array[chosen_dim] = slice(self.cut_points[idx-1], cut_point)
                 slice_array = tuple(slice_array)
-                partition = batch[slice_array]
+                partition = batch_input[slice_array]
                 partitions.append(partition) # partitions are being generated!
 
 

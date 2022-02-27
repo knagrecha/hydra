@@ -39,7 +39,7 @@ class ForwardSplitterLoss():
         model.zero_grad()  # zeroes the gradient buffers of all parameters
         optimizer.zero_grad()  # zero the gradient buffers
 
-        label_region = labels[slice_array]
+        label_region = labels[self.slice_array]
         
         label_region = move_batch_to_device(label_region, device)
         

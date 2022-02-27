@@ -100,9 +100,9 @@ class ModelOrchestrator():
             # FORWARD PASS
             if chosen_shard.direction == "f":
                 batch = [chosen_task.saved_inter_output[x] for x in chosen_shard.requests]
-                
+               
                 # FINAL FORWARD
-                if chosen_shard.idx == len(chosen_task.forward_shards)- 1:
+                if chosen_shard.executor.type == "Forward Loss":
                     arg_list = [batch, chosen_task.label, chosen_task.criterion, device, chosen_task.scaler]
                     chosen_task.scaler, new_batch, chosen_task.last_loss = chosen_shard.run(arg_list)
                 # REGULAR FORWARD
@@ -113,7 +113,7 @@ class ModelOrchestrator():
                     # Detach data for forward passes. Back and final return list-type gradients which don't need
                     # to be detached anyway.
                     if not isinstance(new_batch, torch.Tensor):
-                        new_batch = [i.detach_() for i in new_batch]
+                        new_batch = [i.detach() for i in new_batch]
                     else:
                         new_batch = new_batch.detach()
             # BACKWARD PASS       

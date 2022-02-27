@@ -171,8 +171,11 @@ class ModelTask():
             batch_full = next(self.dataloader)
 
         self.batches_remaining -= 1
-        
-        self.saved_inter_output.append(batch_full[0:len(batch_full)-1])
+        batch_input = batch_full[0:len(batch_full)-1]
+        if (len(batch_input) > 1):
+            self.saved_inter_output.append(batch_input)
+        else:
+            self.saved_inter_output.append(batch_input[0])
         self.label = batch_full[-1]
         
         self.curr_cycle = 0

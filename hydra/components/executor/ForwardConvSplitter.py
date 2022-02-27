@@ -21,7 +21,7 @@ import math
 
 class ForwardConvSplitter():
     def __init__(self, idx, split_count, chosen_dim, kernel_size, padding, stride):
-        self.type="Splitter"
+        self.type="Forward"
         self.idx = idx
         self.split_count = split_count
         
@@ -34,7 +34,6 @@ class ForwardConvSplitter():
 
             # Splitter recives single batch input
             batch_input = batch_input[0]
-
             remainder = batch_input.shape[self.chosen_dim] % self.split_count
             previous_partition = 0
             partition_dimensional_value = 0
@@ -46,42 +45,42 @@ class ForwardConvSplitter():
                 # This code produces roughly even partition points
 
                 if (partition_index) < remainder:
-                    partition_dimensional_value += math.floor(batch.shape[chosen_dim] / partition_count) + 1
+                    partition_dimensional_value += math.floor(batch_input.shape[self.chosen_dim] / self.split_count ) + 1
                 else:
-                    partition_dimensional_value += math.floor(batch.shape[chosen_dim] / partition_count)
+                    partition_dimensional_value += math.floor(batch_input.shape[self.chosen_dim] / self.split_count )
 
 
                 partition = None
 
                 # left-most/top-most/forward-most side of image
                 if partition_index == 0:
-                    print("SLICING FROM {} to {}".format(previous_partition, partition_dimensional_value+kernel_extension_latter))
-                    slice_array = [slice(None) for x in range(len(batch.shape))]
-                    slice_array[chosen_dim] = slice(None, partition_dimensional_value+kernel_extension_latter)
+                    print("SLICING FROM {} to {}".format(previous_partition, partition_dimensional_value+self.kernel_extension_latter))
+                    slice_array = [slice(None) for x in range(len(batch_input.shape))]
+                    slice_array[self.chosen_dim] = slice(None, partition_dimensional_value+self.kernel_extension_latter)
                     slice_array = tuple(slice_array)
-                    partition = batch[slice_array]
+                    partition = batch_input[slice_array]
                     previous_partition = partition_dimensional_value
 
                 # right-most/bottom-most/back-most side of image
-                elif partition_index == partition_count - 1:
-                    print("SLICING FROM {} to {}".format(previous_partition-kernel_extension_prior, partition_dimensional_value))
-                    slice_array = [slice(None) for x in range(len(batch.shape))]
-                    slice_array[chosen_dim] = slice(previous_partition-kernel_extension_prior, None)
+                elif partition_index == self.split_count - 1:
+                    print("SLICING FROM {} to {}".format(previous_partition-self.kernel_extension_prior, partition_dimensional_value))
+                    slice_array = [slice(None) for x in range(len(batch_input.shape))]
+                    slice_array[self.chosen_dim] = slice(previous_partition-self.kernel_extension_prior, None)
                     slice_array = tuple(slice_array)
-                    partition = batch[slice_array]
+                    partition = batch_input[slice_array]
 
                     previous_partition = partition_dimensional_value
 
                 # innards of image
                 else:
-                    print("SLICING FROM {} to {}".format(previous_partition-kernel_extension_prior, partition_dimensional_value+kernel_extension_latter))
+                    print("SLICING FROM {} to {}".format(previous_partition-self.kernel_extension_prior, partition_dimensional_value+self.kernel_extension_latter))
 
 
-                    slice_array = [slice(None) for x in range(len(batch.shape))]
-                    slice_array[chosen_dim] = slice(previous_partition-kernel_extension_prior, partition_dimensional_value+kernel_extension_latter)
+                    slice_array = [slice(None) for x in range(len(batch_input.shape))]
+                    slice_array[self.chosen_dim] = slice(previous_partition-self.kernel_extension_prior, partition_dimensional_value+self.kernel_extension_latter)
                     slice_array = tuple(slice_array)
 
-                    partition = batch[slice_array]
+                    partition = batch_input[slice_array]
                     previous_partition = partition_dimensional_value
 
                 partitions.append(partition) # partitions are being generated!

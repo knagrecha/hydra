@@ -20,7 +20,7 @@ import torch
 
 class BackwardGradientMerger():
     def __init__(self, idx, chosen_dim):
-        self.type="Merger"
+        self.type="Backward"
         self.idx = idx
         self.chosen_dim = chosen_dim
 

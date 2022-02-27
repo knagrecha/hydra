@@ -20,7 +20,7 @@ import torch
 
 class ForwardConvMerger():
     def __init__(self, idx, chosen_dim):
-        self.type="Merger"
+        self.type="Forward"
         self.idx = idx
         self.chosen_dim = chosen_dim
 

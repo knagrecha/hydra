@@ -28,10 +28,19 @@ from einops import rearrange, repeat
 import torchvision.transforms as transforms
 from einops.layers.torch import Rearrange
 
+class FakeDataImgToImg(torch.utils.data.Dataset):
+    def __init__(self, nbr_samples, transform=None):
+        self.nbr_samples=nbr_samples
+        self.sub_dataset = FakeData(size=nbr_samples, image_size=(3, 1100, 1100), num_classes=1, transform=transform)
+    def __len__(self):
+        return self.nbr_samples
+    def __getitem__(self, idx):
+        data, labels = self.sub_dataset[idx]
+        return data, torch.ones_like(data)
 
 
 def custom_loss(pred, target):
-    return torch.sum(pred - torch.ones_like(pred))
+    return torch.sum(pred - target)
 
 """
     Helper function to create a training dataloader.
@@ -42,7 +51,7 @@ def get_data_loader_train(b_size):
     print("\nPreparing to load dataset....")
 
     transform = transforms.Compose( [transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-    dataset = FakeData(size=100, image_size=(3, 1100, 1100), num_classes=1, transform=transform)
+    dataset = FakeDataImgToImg(10, transform=transform)
     return torch.utils.data.DataLoader(dataset, batch_size=b_size)
 
 
@@ -61,18 +70,18 @@ def get_model(depth):
 def main():
     
     model_0 = get_model(2) 
-    model_1 = get_model(2) # 800M params
+    #model_1 = get_model(2) # 800M params
     #model_2 = get_model(2)
     
     params = sum(p.numel() for p in model_0.parameters())
     print("Total parameters: {}".format(params))
 
-    task_0 = ModelTask("Model 0", model_0, custom_loss, get_data_loader_train(100), 0.001, 5)    
-    task_1 = ModelTask("Model 1", model_1, custom_loss, get_data_loader_train(100), 0.001, 5)
+    task_0 = ModelTask("Model 0", model_0, custom_loss, get_data_loader_train(10), 0.001, 5)    
+    #task_1 = ModelTask("Model 1", model_1, custom_loss, get_data_loader_train(100), 0.001, 5)
     #task_2 = ModelTask("Model 2", model_2, nn.CrossEntropyLoss(), get_data_loader_train(128), 0.001, 5)
     
     # create orchestrator
-    orchestra = ModelOrchestrator([task_0, task_1])
+    orchestra = ModelOrchestrator([task_0])
     orchestra.verbose = 1
 
     """
@@ -81,7 +90,7 @@ def main():
     """
     
     # We are setting this incredibly high just to force tensor partitioning
-    orchestra.buffer = 30000
+    orchestra.buffer = 20000
 
     orchestra.generate()
     orchestra.train_models()
