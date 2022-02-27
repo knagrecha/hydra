@@ -186,27 +186,71 @@ class Pilot():
                         intermediate_activations = []
                         
                         if (len(partitioned_layers) == 0):
-                            partition_count, chosen_dim, all_models, out, time_taken_f, time_taken_b, partitioner_time, merger_time = tensor_partitioner(pioneer_layer, 
+                            partition_count, chosen_dim, all_models, out, time_taken_f, time_taken_b, partitioner_time, merger_time, cut_points = tensor_partitioner(pioneer_layer, 
                                                                             shard_batch_input, self.selected_device)
                             
                             
+                            """
+                                Partition_Count = how many divisions to make?
+                                chosen_dim = what dimension do we cut across? 
+                                all_models = each cloned copy of the conv kernel for each partition
+                                out = the merged outputs of each copy
+                                time_taken_f = list of each forward shard's time
+                                time_taken_b = list of each backward shard's time
+                                partitioner_time = time it takes to partition
+                                merger_time = timer it takes to merge outputs
+                                cut_points = where the gradients will be cut and need to be split going backwards
+                            """
+                            
+                            # Create the Forward Splitter
                             forward_partition_executor = executor.ForwardConvSplitter(shard_count, 
                                             partition_count, chosen_dim, layer.kernel_size, layer.padding, layer.stride)
                             
-                            forward_partitioner_task = ShardedTask(None, forward_partition_executor, 
-                                                                                time_taken, shard_count, lr, {-1})
+                            forward_partitioner_task = ShardedTask(None, forward_partition_executor, "f",
+                                                                                partitioner_time, shard_count, lr, {-1})
                             
                             
-                            
+                            # Create the forward Merger
                             forward_merger_executor = executor.ForwardConvMerger(shard_count, chosen_dim)
-                            merger_requests = set([-x for x in range(1, partition_count+1)])
+                            merger_requests = set([x for x in range(-partition_count, 0)])
+                            # requests from the earliest generated (i.e. partition_output_0 to the newest (-1)).
                             
-                            forward_merger_task = ShardedTask(None, forward_merger_executor, 
-                                                                                time_taken, shard_count, lr, merger_requests)
+                            forward_merger_task = ShardedTask(None, forward_merger_executor, "f",
+                                                                                merger_time, shard_count, lr, merger_requests)
+                            # Create the Forward and Backward going shards
+                            forward_partition_shards = []
+                            backward_partition_shards = []
                             
                             for model_idx in range(partition_count):
-                                
-   
+                                forward_partition_shards.append(ShardedTask(all_models[model_idx], 
+                                                                    executor.Forward(shard_count), 
+                                                                    "f", time_taken_f, lr, {-partition_count})
+                                # Creates a shard requesting input of - partition_count. Keep in mind that the forward
+                                # going queue will be appended to by each shard, so the offset is consistent each time.
+                                                                
+                                                                
+                                backward_partition_shards.append(ShardedTask(all_models[model_idx], 
+                                                                    executor.Backward(shard_count), 
+                                                                    "b", time_taken_b, lr, {model_idx - partition_count})
+                                # Creates a shard requesting inputs ranging from -partition_count to -1.
+                            
+                                                            
+                            # Create the Backward Splitter
+                            backward_partition_executor = executor.BackwardGradientSplitter(shard_count, 
+                                            partition_count, chosen_dim, cut_points)
+                            
+                            backward_partitioner_task = ShardedTask(None, backward_partition_executor, "b",
+                                                                                partitioner_time, shard_count, lr, {-1})
+                            
+                            
+                            # Create the Backward Merger
+                            backward_merger_executor = executor.BackwardGradientMerger(shard_count, chosen_dim)
+                            merger_requests = set([-x for x in range(1, partition_count+1)])
+                            
+                            backward_merger_task = ShardedTask(None, backward_merger_executor, "b",
+                                                                                merger_time, shard_count, lr, merger_requests)
+                             
+                                                                 
    
                         else:
                             oom = False
@@ -245,10 +289,15 @@ class Pilot():
                             batch_input = shard_batch_input
                             
                             # Create new shards
-                            forward_shards.append(ShardedTask(model, executor.Forward(shard_count), 
+                            if partitioning_index == (len(all_layers)) - 1:
+                                forward_shards.append(ShardedTask(model, executor.ForwardLoss(shard_count), 
                                                                         "f", end_f-start_f, shard_count, lr, {-1}))
-                            backward_shards.append(ShardedTask(model, executor.Backward(shard_count), 
-                                                                        "b", end_b-start_b, shard_count, lr, {-1}))
+                            
+                            else:
+                                forward_shards.append(ShardedTask(model, executor.Forward(shard_count), 
+                                                                            "f", end_f-start_f, shard_count, lr, {-1}))
+                                backward_shards.append(ShardedTask(model, executor.Backward(shard_count), 
+                                                                            "b", end_b-start_b, shard_count, lr, {-1}))
                         
                     except Exception as e:
                         if ("memory" not in str(e)):
@@ -306,8 +355,7 @@ class Pilot():
             end_b = timer()
 
             forward_shards.append(ShardedTask(model, executor.ForwardLoss(shard_count), "f", end_f - start_f, shard_count, lr, {-1}) )
-            backward_shards.append(ShardedTask(model, executor.Backward(shard_count), "b", end_b - start_b, shard_count, lr, {-1} ))
-
+          
             total_time = total_time + (end_f - start_f) + (end_b - start_b)
 
             
@@ -316,8 +364,7 @@ class Pilot():
             print("=======Anticipated Minibatch Times: {:.2f}s=======".format(total_time))
             
         backward_shards.reverse()
-        backward_shards.pop(0) # The forward and backward shards share their last and first shards respectively, only need 1
-
+        
         if (double_buffer != 0):
             del buffer_space
             torch.cuda.empty_cache()

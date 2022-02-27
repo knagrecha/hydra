@@ -242,10 +242,17 @@ def tensor_partitioner(layer, batch, device):
             
             ##### SUCCESS! #####
             start = timer()
+            
+            cut_points = []
+            current_index = 0
+            for out in all_outs:
+                current_index += out.shape[chosen_dim]
+                cut_points.append(current_index)
+            
             out = torch.cat(all_outs, chosen_dim)
             merger_time = timer()-start
             
-            return partition_count, chosen_dim, all_models, out, time_taken_f, time_taken_b, partition_time, merger_time 
+            return partition_count, chosen_dim, all_models, out, time_taken_f, time_taken_b, partition_time, merger_time, cut_points 
             
             
         except Exception as e:
