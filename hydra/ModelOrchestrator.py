@@ -184,9 +184,6 @@ class ModelOrchestrator():
         ctr = 0
         
 
-
-        
-
         cache_task = None # use this to try and "guess" the next task's completion time for that shard.
         cache_device = None
         

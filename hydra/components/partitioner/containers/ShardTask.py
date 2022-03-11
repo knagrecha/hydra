@@ -15,8 +15,11 @@
 import torch
 
 """
-    The "shard" wrapper. Holds reference to a 'model' - an NNContainer consisting
-    of a subset of layers of the original model.
+    The "shard-stage" wrapper. Essentially refers to a particular shard's part of the minibatch 
+    (known as a microbatch in prior art). 
+    
+    Holds reference to a 'model' of type GenericExecutor consisting
+    of a subset of the original model dictionary.
     
     Also holds a "direction", determining which microbatch-stage this shard covers.
     
@@ -26,9 +29,9 @@ import torch
 
 """
 
-class ShardedTask():
+class ShardTask():
 
-    def __init__(self, model, executor, direction, time_taken, idx, lr, *args):
+    def __init__(self, model, executor, direction, time_taken, idx, lr):
         self.lr = lr
         self.model = model
         self.direction = direction
@@ -37,8 +40,9 @@ class ShardedTask():
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr = self.lr)
         self.executor = executor
     
-    def run(self, arg_list):
-        if self.executor.type != "Forward":
-            return self.executor.run(self.model, self.optimizer, *arg_list)
+    def run(self, tensor_dictionary, gradient_tensor_dictionary=None):
+        if self.direction == "f":
+            self.model.forward(tensor_dictionary)
         else:
-            return self.executor.run(self.model, *arg_list)
+            self.model.backward(tensor_dictionary, gradient_tensor_dictionary)
+            self.optimizer.step()

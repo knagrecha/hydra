@@ -19,44 +19,74 @@ from hydra.utilities import get_free_space
 import numpy as np
 from torch import multiprocessing as multiprocessing
 from hydra.components.partitioner import Pilot
-
-
-def get_load_time(shard, a, device):
-    b = a[:-1]
-    b = [d.to(device) for d in b]
-    shard.model.to(device)
-    for idx, i in enumerate(b):
-        b[idx] = i.cpu()
-    for idx, i in enumerate(b):
-        b[idx] = i.to(device)
-    for idx, i in enumerate(b):
-        b[idx] = i.cpu()
-    while (len(b) > 0):
-        del b[0]
-    del b
-    del a
-    torch.cuda.empty_cache()
+from collections import defaultdict
 
 class ModelTask():
-    def __init__(self, name, model, criterion, dataloader, lr, epochs, global_timer=None, use_scaler=False, partitioner=Pilot()):
+    #def __init__(self, name, model, criterion, dataloader, lr, epochs, global_timer=None, use_scaler=False, partitioner=Pilot()):
+    
+    """
+        name: simple identifier used during debugging
+        layer_dictionary: identifies layers with numbers
+        io_dictionary: maps layers to what they pass data to forward
+            Batch components can be referenced as batch_{idx}
+        criterions must be part of the layer_dictionary and io_dictionary passed in.
+            Labels can be referenced as label_{idx}
+        dataloader: PyTorch dataloader for data access
+        lr: learning rate
+        epochs: total epochs to be run   
+    """
+    
+    
+    def __init__(self, name, layer_dictionary, io_dictionary, dataloader, lr, epochs):
         
         """
             Understanding arbitrary model execution requires a "mapping" of inputs and outputs in the model.
-            For this purpose, we use two Python dictionary.
+            For this purpose, we use three Python dictionaries.
+            
+            
+            layer_dictionary:
+                Maps layer indices to actual Torch layer objects.
             
             layer_to_input: 
-                The keys are layer indices from the model, and the values are the layer indices that need to be resolved
+                The keys are layer indices from the model, and the values are the 
+                layer indices that need to be resolved
                 for that key to be executed.
                 
             layer_to_output: 
-                The keys are layer indices from the model, and the values are the layer indices that use this layer as inp
+                The keys are layer indices from the model, and the values are the layer indices that
+                use this layer as inp
             
         """
-        layer_to_input_dict = {}
-        layer_to_output_dict = {}
+        self.layer_dictionary = layer_dictionary
+        self.layer_dictionary["END"] = None # the injected endpoint. Will not be added to shards.
+
+        self.layer_to_input_dict = io_dictionary
         
+        self.layer_to_output_dict = defaultdict(list)
+        
+        self.tensor_dictionary = {}
+        self.grad_dictionary = {"END": None}
+        
+        # endpoint keys (criterions) will essentially not appear in
+        # any key's value. They do not output to anyone
+        
+        # essentially invert the dictionary
+        for key, value in self.layer_to_input_dict:
+            for val in value:
+                self.layer_to_output_dict[val].append(key)
+                
+                
+                
+                
+        endpoint_keys = self.layer_to_input_dict.keys() - self.layer_to_output_dict.keys()
+        self.layer_to_input_dict["END"] = list(endpoint_keys)
+        for key in endpoint_keys:
+            self.layer_to_output_dict[key].append("END")
+
         """
             The layer_to_inputs can be used to create a coarser shard_to_input dict.
+                layer_dictionary:
+                    Maps indices to ShardTask objects.
                 shard_to_input:
                     The keys are shard indices from the model, and the values are the shard indices that need to be resolved
                     for that key to be executed.
@@ -67,42 +97,29 @@ class ModelTask():
             
         """
         
-        shard_to_input_dict = {}
-        shard_to_output_dict = {}
+        self.shard_dictionary = {}
+        self.shard_to_input_dict = {}
+        self.shard_to_output_dict = defaultdict(list)
         
         """
-            A list of layer indices that have all their dependencies resolved. At each shard completion, 
+            A list of layer indices that have all their 
+            dependencies resolved. At each shard completion, 
             we update resolved dependencies.
         """
-        candidate_shards = [] 
+        self.candidate_shards = [] 
+        self.completed_shards = 0 # how many shards have been run
+        self.total_shards = len(self.shard_dictionary.keys()) # how many shards to run overall
         
         
+        self.global_timer = global_timer # used to identify running times
+        self.name = name # used in debugging
         
         
+        #self.model = model
+        #self.forward_shards = []
+        #self.backward_shards = []
         
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        self.global_timer = global_timer
-        self.name = name
-        self.model = model
-        self.forward_shards = []
-        self.backward_shards = []
         self.remaining_runtime = 0
-        
         self.partitioner = partitioner
         
         
@@ -115,130 +132,100 @@ class ModelTask():
         self._old_data = dataloader
         self.dataloader = iter(dataloader)
         self.total_length = len(self._old_data)
-        self.queue = []
         self.batches_remaining = len(dataloader)
-        self.saved_inter_output = []
-        self.gradient = None
         self.verbose = 0
 
-        if (use_scaler):
-            self.scaler = torch.cuda.amp.GradScaler()
-        else:
-            self.scaler = None
-        self.label = None
         self.batch_time = 0
-        
-        self.queue_len = 0
-        self.curr_cycle = 0
+
         self.last_mini_time = 0
         self.last_runtime = 0
         self.last_loss = 0
-        self.list_of_waste = []
-      
-        self.active_time = 0
-        self.my_device = None
-        self.anticipated_curr_shard_time = 0
-        self.setup_complete = False
-        self.total_time = 0
-
-    def clear(self):
-        del self._old_data
-        del self.dataloader
-        del self.queue
-        del self.label
         
-    def cleanup(self):
-        for shard in self.forward_shards:
-            del shard
-        while(len(self.saved_inter_output) > 0):
-            del self.saved_inter_output[0]
-        del self.dataloader
-        del self._old_data
-        del self.scaler
-        while(len(self.queue) > 0):
-            del self.queue[0]
-        if (self.gradient is not None):
-            del self.gradient
-        
-        
-    def clear_settings(self):
-        self.anticipated_curr_shard_time = 0
-        
-   
+        self.blocked_devices = []
         
     def setup(self, verbose, buffer):
         
-        self.forward_shards, self.backward_shards, self.total_time = self.partitioner.shard(
+        # generate shards and expected minibatch runtime
+        self.shard_dictionary, self.shard_to_input_dict, self.batch_time = self.partitioner.shard(
                                                                         self.model, self.criterion, 
                                                                         next(self.dataloader), 
                                                                         buffer, 
                                                                         self.lr, 
                                                                         verbose
                                                                         )
+         # essentially invert the dictionary
+        for key, value in self.shard_to_input_dict:
+            for val in value:
+                self.shard_to_output_dict[val].append(key)
+                
         self.verbose = verbose
-        
-        self.queue.extend(self.forward_shards)
-        self.queue.extend(self.backward_shards)
-        
-        start = timer()
-        self.dataloader = iter(self._old_data)
-        a = next(self.dataloader)
-        self.batch_time = timer() - start
-        del self.dataloader
-        self.dataloader = iter(self._old_data)
-        
-        
-        available_gpus = torch.cuda.device_count()
-        available_devices = list(range(available_gpus))
-        free_spaces = [get_free_space(x) for x in available_devices]
-        device_idx = np.argmin(free_spaces)
-        device = torch.device("cuda:"+str(device_idx))
-   
-
         for shard in self.queue:
-            torch.cuda.empty_cache()
-            start = timer()
-            get_load_time(shard, a, device)
-            self.list_of_waste.append(timer() - start)
             shard.model = shard.model.cpu()
-        print(self.list_of_waste)
-        
         self.queue_len = len(self.queue)
-     
-    def setup_timing(self, device):
-        
-        if (next(self.queue[0].model.parameters()).device == torch.device(device)):
-            self.anticipated_curr_shard_time = timer() - self.global_timer + self.queue[0].time_cost
-            self.my_device = device
-        else:
-            self.anticipated_curr_shard_time = timer() - self.global_timer + self.queue[0].time_cost + self.list_of_waste[self.curr_cycle]
-            self.my_device = device
-            
+
     def get_new_batch(self):
+        
+        # Reset the tensor dictionary and gradient dictionary
+        self.tensor_dictionary = {}
+        self.grad_dictionary = {"END": None}
+        
+        # Time between last minibatch completion and this one
         self.last_runtime = timer()-self.last_mini_time
         
+        
         try:
-            batch_full = next(self.dataloader)
+            batch, label = next(self.dataloader) # get the next minibatch
         except StopIteration:
-            del self.dataloader
-            self.epochs -= 1
-            self.dataloader = iter(self._old_data)
-            self.batches_remaining = len(self._old_data)
-            batch_full = next(self.dataloader)
+            del self.dataloader # delete old dataloader
+            self.epochs -= 1 # count off an epoch
+            self.dataloader = iter(self._old_data) # regenerate the dataloader
+            self.batches_remaining = len(self._old_data) # set the number of minibatches
+            batch, label = next(self.dataloader) # get the next minibatch
 
-        self.batches_remaining -= 1
+        self.batches_remaining -= 1 # decrement minibatch count
         
-        self.saved_inter_output.append(batch_full[0:len(batch_full)-1])
-        self.label = batch_full[-1]
+        # initialize the tensor dictionary with initial minibatch
+        if not isinstance(batch, torch.Tensor):
+            for idx, tensor in enumerate(batch):
+                self.tensor_dictionary["batch_{}".format(idx)] = tensor
+        else:
+            self.tensor_dictionary["batch_0"] = batch 
+
+        # initialize the tensor dictionary with initial minibatch
+        if not isinstance(label, torch.Tensor):
+            for idx, tensor in enumerate(label):
+                self.tensor_dictionary["label_{}".format(idx)] = tensor
+        else:
+            self.tensor_dictionary["label_0"] = label 
+            
+    """
+        Updates the ModelTask. Should be called after each shard completion.
+    """
+    def update_task(self, ret_tensor_dictionary=None, ret_grad_dictionary=None):
+        if ret_tensor_dictionary is not None:
+            self.tensor_dictionary.update(ret_tensor_dictionary)
+        if ret_grad_dictionary is not None:
+            self.grad_dictionary.update(ret_grad_dictionary)
         
-        self.curr_cycle = 0
-  
-        self.last_mini_time = timer()
-    
         
-    def get_shard(self):
-        shard = self.queue.pop(0)
-        if (self.epochs > 1 or self.batches_remaining >= 1):
-            self.queue.append(shard)
-        self.curr_cycle +=1
-        return shard
+        """
+            TODO: UPDATE CANDIDATE SHARDS
+        """
+        for
+        
+        self.completed_shards += 1
+        if (self.completed_shards == self.total_shards):
+            self.get_new_batch()
+        
+    def get_shard(self, key):
+        self.candidate_shards.remove(key)
+        shard_task = self.shard_dictionary[key]
+        tensor_requests = self.layer_to_input_dict[key]
+        input_tensors = {k: self.tensor_dictionary[k] for k in tensor_requests}
+        if shard_task.direction == "b":
+            grad_requests = self.layer_to_output_dict[key]
+            grad_tensors = {k: self.grad_dictionary[k] for k in tensor_requests}
+        else:
+            grad_tensors = None
+            
+        return shard_task, input_tensors, grad_tensors

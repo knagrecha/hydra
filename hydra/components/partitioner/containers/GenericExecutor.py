@@ -70,7 +70,7 @@ class GenericExecutor(nn.Module):
     
     """
         Backward pass makes use of gradient checkpointing to regenerate tensors.
-        Grad tensor dict matches layers to the gradients they should receive.
+        Grad tensor dict matches layers to the tensor gradients they produced during backprop.
         Here we run a 'DFS' of the model for the forward pass.
     """
     def DFS_helper(layer_index, tensor):
@@ -92,16 +92,31 @@ class GenericExecutor(nn.Module):
             found_layers.append(layer_index)
             return outputs, found_layers
             
-        
+    """
+        The actual backward pass DFS's to find leaf tensors before calling autograd 
+        and updating gradient pass backs.
+    """  
     
     def backward(self, in_tensor_dict, grad_tensor_dict):
         successful_pass = False
         for key, value in in_tensor_dict: 
-            value.requires_grad_(True)
+            
+            # if it's not the initial batch
+            rq = False
+            if not (isinstance(key, str) and "batch" in key):
+                value.requires_grad_(True)
+                rq = True
+                
             leaf_outputs, leaf_indices = DFS_helper(key, value) # produce the end-point outputs
             ret_grads = [grad_tensor_dict[idx] for idx in leaf_indices]
             torch.autograd.backward(leaf_outputs, ret_grads)
-            grad_tensor_dict[key] = value.grad # define the gradient to be passed back
+            
+            if rq:
+                grad_tensor_dict[key] = value.grad # define the gradient to be passed back
+                value.grad = None
+                value.requires_grad_(False)
+                
             for g_key in leaf_indices:
                 del grad_tensor_dict[g_key] # delete consumed gradients
+                
         return grad_tensor_dict
