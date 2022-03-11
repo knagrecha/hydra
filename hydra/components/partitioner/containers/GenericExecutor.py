@@ -25,6 +25,7 @@ import torch
     input_dictionary matches input provider indices to a list of layers (forward).
     reverse_input_dictionary dictionary recipient layer indices to provider indices.
         Includes immediate connected recipients from the next shards down.
+        DOES NOT INCLUDE the initial connectors of this shard (i.e. this shard's link to prior shards)
 """
 
 
@@ -95,9 +96,11 @@ class GenericExecutor(nn.Module):
         successful_pass = False
         while not successful_pass:
             marked_for_deletion = []
-            for key, value in in_tensor_dict:
-                if key in in self.input_dictionary:
-                    grads_to_use = grad_tensor_dict[key]
+            # for each forward-pass receipient, and associated gradient
+            for key, value in grad_tensor_dict:
+                if key in in self.reverse_input_dictionary:
+                    
+                    recipient_layers = self.reverse_input_dictionary[key]
                     for layer in recipient_layers:
                         in_tensor_dict[layer] = self.layer_dictionary[layer](value)
                     marked_for_deletion.append(key)
