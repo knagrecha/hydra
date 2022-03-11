@@ -43,6 +43,7 @@ class GenericExecutor(nn.Module):
     """
         Forward pass will continue to run until no internal layer-input match can be found.
         Tensor dictionary matches previous layer indices to their outputs.
+        This is basically a 'BFS' through the model.
     """
     def forward(self, tensor_dictionary):
         with torch.no_grad():
@@ -51,7 +52,7 @@ class GenericExecutor(nn.Module):
                 marked_for_deletion = []
                 # for every received provider, tensor
                 for key, value in tensor_dictionary:
-                    if key in in self.input_dictionary: # check if the provider has a 
+                    if key in self.input_dictionary: # check if the provider has a 
                                                         # corresponding recipient layer in this model
                         recipient_layers = self.input_dictionary[key] # identify receiving layers
                         for layer in recipient_layers:
@@ -70,45 +71,37 @@ class GenericExecutor(nn.Module):
     """
         Backward pass makes use of gradient checkpointing to regenerate tensors.
         Grad tensor dict matches layers to the gradients they should receive.
+        Here we run a 'DFS' of the model for the forward pass.
     """
+    def DFS_helper(layer_index, tensor):
+        outputs = []
+        found_layers = []
+        my_output = self.layer_dictionary[layer_index](tensor)
+        if layer_index in self.input_dictionary:
+            recipient_layers = self.input_dictionary[key]
+            for rec in recipient_layers:
+                ou, fl = DFS_helper(rec, my_output)
+                outputs.extend(ou)
+                found_layers.extend(fl)
+                
+            return outputs, found_layers
+                
+        # we don't own the next layer. Time to return!
+        else:
+            outputs.append(tensor)
+            found_layers.append(layer_index)
+            return outputs, found_layers
+            
+        
+    
     def backward(self, in_tensor_dict, grad_tensor_dict):
         successful_pass = False
-        while not successful_pass:
-            marked_for_deletion = []
-            # for every received provider, tensor
-            for key, value in in_tensor_dict: 
-                if key in in self.input_dictionary: # check if the provider has a 
-                                                    # corresponding recipient layer in this model
-                    recipient_layers = self.input_dictionary[key]
-                    for layer in recipient_layers:
-                        in_tensor_dict[layer] = self.layer_dictionary[layer](value)
-                    marked_for_deletion.append(key)
-            if (len(marked_for_deletion) == 0):
-                successful_pass = True
-            else:
-                for key in marked_for_deletion:
-                    del in_tensor_dict[key]
-                    
-        
-        # in_tensor_dict now ONLY contains our local shard outputs.
-        # We will do the same dict-lookup pass as the forward pass, in reverse
-        
-        successful_pass = False
-        while not successful_pass:
-            marked_for_deletion = []
-            # for each forward-pass receipient, and associated gradient
-            for key, value in grad_tensor_dict:
-                if key in in self.reverse_input_dictionary:
-                    
-                    recipient_layers = self.reverse_input_dictionary[key]
-                    for layer in recipient_layers:
-                        in_tensor_dict[layer] = self.layer_dictionary[layer](value)
-                    marked_for_deletion.append(key)
-            if (len(marked_for_deletion) == 0):
-                successful_pass = True
-            else:
-                for key in marked_for_deletion:
-                    del in_tensor_dict[key]
-                
-                
-        return tensor_dictionary
+        for key, value in in_tensor_dict: 
+            value.requires_grad_(True)
+            leaf_outputs, leaf_indices = DFS_helper(key, value) # produce the end-point outputs
+            ret_grads = [grad_tensor_dict[idx] for idx in leaf_indices]
+            torch.autograd.backward(leaf_outputs, ret_grads)
+            grad_tensor_dict[key] = value.grad # define the gradient to be passed back
+            for g_key in leaf_indices:
+                del grad_tensor_dict[g_key] # delete consumed gradients
+        return grad_tensor_dict
