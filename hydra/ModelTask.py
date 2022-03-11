@@ -39,6 +39,63 @@ def get_load_time(shard, a, device):
 
 class ModelTask():
     def __init__(self, name, model, criterion, dataloader, lr, epochs, global_timer=None, use_scaler=False, partitioner=Pilot()):
+        
+        """
+            Understanding arbitrary model execution requires a "mapping" of inputs and outputs in the model.
+            For this purpose, we use two Python dictionary.
+            
+            layer_to_input: 
+                The keys are layer indices from the model, and the values are the layer indices that need to be resolved
+                for that key to be executed.
+                
+            layer_to_output: 
+                The keys are layer indices from the model, and the values are the layer indices that use this layer as inp
+            
+        """
+        layer_to_input_dict = {}
+        layer_to_output_dict = {}
+        
+        """
+            The layer_to_inputs can be used to create a coarser shard_to_input dict.
+                shard_to_input:
+                    The keys are shard indices from the model, and the values are the shard indices that need to be resolved
+                    for that key to be executed.
+                    
+                shard_to_output:
+                    The keys are shard indices from the model, and the values are the shard indices that need to be resolved
+                    for that key to be executed.
+            
+        """
+        
+        shard_to_input_dict = {}
+        shard_to_output_dict = {}
+        
+        """
+            A list of layer indices that have all their dependencies resolved. At each shard completion, 
+            we update resolved dependencies.
+        """
+        candidate_shards = [] 
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
         self.global_timer = global_timer
         self.name = name
         self.model = model

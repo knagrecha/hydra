@@ -17,13 +17,13 @@ from .utilities import get_free_space
 import gc
 
 import torch
-class NNContainer(nn.Module):
-    def __init__(self, layers):
+class GenericExecutor(nn.Module):
+    def __init__(self, layer_dictionary, input_output_dictionary):
 
-        super(NNContainer, self).__init__()
+        super(GenericExecutor, self).__init__()
         
-        for idx, layer in enumerate(layers):
-            self.add_module("Module_{}".format(idx), layer)
+        for key, value in layer_dictionary:
+            self.add_module("Module_{}".format(key), value)
 
     def forward(self, x):
         for idx, mod in enumerate(self.children()):
