@@ -32,44 +32,29 @@ import traceback
 global_timer = timer()
 thread_lock = threading.Lock()
 
+"""
+    The "orchestrator"/scheduler that assigns ModelTasks for training.
+
+"""
 
 
 class ModelOrchestrator():
     def __init__(self, tasks):
-        
-        #multiprocessing.set_start_method('spawn', force=True)
-
         available_gpus = min(torch.cuda.device_count(), len(tasks))
-        
-       
-        
         self.all_devices = list(range(available_gpus))
         self.available_devices = list(range(available_gpus))
         self.active_devices = []
         self.verbose = 0
         self.tasks = copy.copy(tasks)
+        self.idle_tasks = copy.copy(tasks)
         for i in self.tasks:
             i.global_timer = global_timer
-        self.idle_tasks = copy.copy(tasks)
         self.active_tasks = []
         self.cached_tasks = []
         self.buffer = None
         self.sleep_event = threading.Event()
-        #self.process_pool = multiprocessing.Pool(processes = cpus, maxtasksperchild=1)
-        
-        #print("Creating Thread pool.")
         self.thread_pool = concurrent.futures.ThreadPoolExecutor()
-        #print("Pool created.")
-   
-    def setup_all_models(self):
-        start = timer()
-        for task in self.tasks:
-            task.setup(self.verbose, self.buffer)
-            #print("TASK {} finished setup".format(task.name))
-        #print("ALL TASKS SETUP!")
 
-            
-        end = timer()
         
     def generate(self):
         self.setup_all_models()
@@ -83,88 +68,52 @@ class ModelOrchestrator():
 
 
     """
-    Setups the parameters for the train_shard function
+        Executes training. 
+        Receives as input a ShardTask, the ModelTask that owns it, 
+        input tensors, grad tensors (can be None), and an assigned device.
     """
 
-    def train_shard_on_device(self, chosen_task, chosen_shard, chosen):
+    def train_shard_on_device(self, model_shard, model_task, input_tensors, grad_tensors, chosen_device, chosen_shard_index):
         try:
             profile_timer_start = timer()
-            device = torch.device("cuda:{0}".format(chosen))
-            if chosen_shard.idx == 0:
-                if chosen_shard.direction == "f":
-                    chosen_task.get_new_batch()
 
-            # defining the parameters
-            criterion, back_input, batch, labels = None, None, None, None
-
-            # FORWARD PASS
-            if chosen_shard.direction == "f":
-                batch = chosen_task.saved_inter_output[-1]
+            
+            returned_tensors = model_shard.run(chosen_device, input_tensors, grad_tensors) # run the model
+            
+            # if any of the tensors are requested by a cached shard, then do not move them (mark_saved), otherwise
+            # send to CPU
+            ret_keys = returned_tensors.keys()
+            mark_saved = {}
+            if returned_tensors:
+                do_save = False
+                for cached_task, cached_shard in self.cached_shard:
+                    if cached_task == model_task:
+                        for key in ret_keys:
+                            if key in cached_task.shard_to_input_dict[cached_shard]:
+                                mark_saved.add(key)
                 
-                # FINAL FORWARD
-                if chosen_shard.idx == len(chosen_task.forward_shards)- 1:
-                    arg_list = [batch, chosen_task.label, chosen_task.criterion, device, chosen_task.scaler]
-                    chosen_task.scaler, new_batch, chosen_task.last_loss = chosen_shard.run(arg_list)
-                # REGULAR FORWARD
-                else:
-                    arg_list = [batch, device]
-                    new_batch = chosen_shard.run(arg_list)
-                    
-                    # Detach data for forward passes. Back and final return list-type gradients which don't need
-                    # to be detached anyway.
-                    if not isinstance(new_batch, torch.Tensor):
-                        new_batch = [i.detach_() for i in new_batch]
-                    else:
-                        new_batch = new_batch.detach()
-            # BACKWARD PASS       
+                for key in ret_keys:
+                    if key not in mark_saved:
+                        returned_tensors[key] = returned_tensors[key].to("cpu", non_blocking=True)
+
+            
+            if model_shard.direction == "f":
+                model_task.update_task(chosen_shard_index, ret_tensor_dictionary=returned_tensors)
             else:
-                batch = chosen_task.gradient
-                back_input = chosen_task.saved_inter_output[-1]
-                arg_list = [batch, device, back_input, chosen_task.scaler]
-                chosen_task.scaler, new_batch = chosen_shard.run(arg_list)
-
-            # Hold in place if possible
-            if (new_batch is not None):
-                if (chosen_task not in self.cached_tasks or chosen_task.queue_len == 1):
-                    new_batch = move_batch_to_device(new_batch, "cpu")
-               
-            my_batch = new_batch
-
-            if (chosen_task not in self.cached_tasks or chosen_task.queue_len > 1):
-                chosen_shard.model = chosen_shard.model.to("cpu", non_blocking=True)
-
-            l_f = False
-            if chosen_shard.idx == len(chosen_task.forward_shards)- 1 and chosen_shard.direction == "f":
-                l_f = True
-
-            # if backward pass, update the gradient
-            if chosen_shard.direction == "b" or l_f:
-                chosen_task.gradient = my_batch
-                chosen_task.saved_inter_output.pop()
-
-            # if forward, prep it for next pass.
+                model_task.update_task(chosen_shard_index, ret_grad_dictionary=returned_tensors)
+                
+            if model_task.epochs < 0:
+                self.tasks.remove(model_task)
+                print("Task {} has finished at time {}.".format(chosen_task.name, timer()-global_timer))
             else:
-                chosen_task.saved_inter_output.append(my_batch)
+                self.idle_tasks.append(model_task)
 
-            #thread_lock.acquire()
-            if len(chosen_task.queue) == 0:
-                #print("TASK FULLY COMPLETE")
-                self.tasks.remove(chosen_task)
-                #self.log("Task {} has completely finished at time {}.".format(chosen_task.name, timer()-global_timer))
-                chosen_task.cleanup() # remove for production
-            else:
-                chosen_task.clear_settings()
-                self.idle_tasks.append(chosen_task)
-
-            #print("Task {} has finished at time {}.".format(chosen_task.name, timer()-global_timer))
-            self.unlock_device(chosen)
-            self.active_tasks.remove(chosen_task)
+            self.unlock_device(chosen_device)
+            self.active_tasks.remove(model_task)
 
             profile_timer_end = timer()
-
-            chosen_shard.time_cost = profile_timer_end - profile_timer_start # time for process running, assuming model is on device.
-            #thread_lock.release()
             self.sleep_event.set()
+            
         except Exception as e:
             traceback.print_exc()
             print(e)
@@ -182,14 +131,9 @@ class ModelOrchestrator():
         print("TRAINING STARTS")
         
         ctr = 0
-        
-
         cache_task = None # use this to try and "guess" the next task's completion time for that shard.
         cache_device = None
-        
         CACHE_SYSTEM = True
-        
-        
         self.cached_tasks = [None for x in range(len(self.all_devices))]
         running_tasks = [None for x in range(len(self.all_devices))]
         

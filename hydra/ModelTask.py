@@ -37,7 +37,7 @@ class ModelTask():
     """
     
     
-    def __init__(self, name, layer_dictionary, io_dictionary, dataloader, lr, epochs):
+    def __init__(self, name, layer_dictionary, io_dictionary, dataloader, lr, epochs, verbose=0):
         
         """
             Understanding arbitrary model execution requires a "mapping" of inputs and outputs in the model.
@@ -88,12 +88,13 @@ class ModelTask():
                 layer_dictionary:
                     Maps indices to ShardTask objects.
                 shard_to_input:
-                    The keys are shard indices from the model, and the values are the shard indices that need to be resolved
+                    The keys are shard indices from the model, and the values are the 
+                    LAYER (not shard) indices that need to be resolved
                     for that key to be executed.
                     
                 shard_to_output:
-                    The keys are shard indices from the model, and the values are the shard indices that need to be resolved
-                    for that key to be executed.
+                    The keys are shard indices from the model, and the values are the LAYERS (not shard)
+                    indices that use this shard as input.
             
         """
         
@@ -106,9 +107,9 @@ class ModelTask():
             dependencies resolved. At each shard completion, 
             we update resolved dependencies.
         """
-        self.candidate_shards = [] 
-        self.completed_shards = 0 # how many shards have been run
-        self.total_shards = len(self.shard_dictionary.keys()) # how many shards to run overall
+        self.candidate_shards = {} 
+        self.completed_shards = {} # how many shards have been run
+        self.total_shards = self.shard_dictionary.keys() # how many shards to run overall
         
         
         self.global_timer = global_timer # used to identify running times
@@ -132,8 +133,8 @@ class ModelTask():
         self._old_data = dataloader
         self.dataloader = iter(dataloader)
         self.total_length = len(self._old_data)
-        self.batches_remaining = len(dataloader)
-        self.verbose = 0
+        self.minibatches_remaining = len(dataloader)
+        self.verbose = verbose
 
         self.batch_time = 0
 
@@ -143,46 +144,48 @@ class ModelTask():
         
         self.blocked_devices = []
         
-    def setup(self, verbose, buffer):
-        
-        # generate shards and expected minibatch runtime
-        self.shard_dictionary, self.shard_to_input_dict, self.batch_time = self.partitioner.shard(
-                                                                        self.model, self.criterion, 
-                                                                        next(self.dataloader), 
-                                                                        buffer, 
-                                                                        self.lr, 
-                                                                        verbose
-                                                                        )
-         # essentially invert the dictionary
-        for key, value in self.shard_to_input_dict:
-            for val in value:
-                self.shard_to_output_dict[val].append(key)
-                
-        self.verbose = verbose
+    def setup(self, buffer=None, shard_dictionary=None, shard_to_input_dict=None, batch_time=None):
+        if shard_dictionary is not None:
+            self.shard_dictionary = shard_dictionary
+            self.shard_to_input_dict = shard_to_input_dict
+            self.batch_time = batch_time
+        else:
+            # generate shards and expected minibatch runtime
+            self.shard_dictionary, self.shard_to_input_dict, self.shard_to_output_dict, self.batch_time = self.partitioner.shard(
+                                                                            self.layer_dictionary, 
+                                                                            next(iter(self._old_data)), 
+                                                                            buffer, 
+                                                                            self.lr, 
+                                                                            self.verbose
+                                                                            )
         for shard in self.queue:
             shard.model = shard.model.cpu()
-        self.queue_len = len(self.queue)
-
+            
+        self.get_new_batch()
     def get_new_batch(self):
         
         # Reset the tensor dictionary and gradient dictionary
         self.tensor_dictionary = {}
+        self.completed_shards = {}
         self.grad_dictionary = {"END": None}
         
         # Time between last minibatch completion and this one
         self.last_runtime = timer()-self.last_mini_time
         
         
+        # Update minibatch, handle new batch as well
         try:
             batch, label = next(self.dataloader) # get the next minibatch
         except StopIteration:
             del self.dataloader # delete old dataloader
             self.epochs -= 1 # count off an epoch
             self.dataloader = iter(self._old_data) # regenerate the dataloader
-            self.batches_remaining = len(self._old_data) # set the number of minibatches
+            self.minibatches_remaining = len(self._old_data) # set the number of minibatches
             batch, label = next(self.dataloader) # get the next minibatch
 
-        self.batches_remaining -= 1 # decrement minibatch count
+        self.minibatches_remaining -= 1 # decrement minibatch count
+        
+        
         
         # initialize the tensor dictionary with initial minibatch
         if not isinstance(batch, torch.Tensor):
@@ -201,29 +204,34 @@ class ModelTask():
     """
         Updates the ModelTask. Should be called after each shard completion.
     """
-    def update_task(self, ret_tensor_dictionary=None, ret_grad_dictionary=None):
+    def update_task(self, completed_index, ret_tensor_dictionary=None, ret_grad_dictionary=None):
+        
+        self.completed_shards.add(completed_index)
+        
         if ret_tensor_dictionary is not None:
             self.tensor_dictionary.update(ret_tensor_dictionary)
         if ret_grad_dictionary is not None:
             self.grad_dictionary.update(ret_grad_dictionary)
         
+        # get shards that are not already executed or primed
+        eval_shards = (self.total_shards - self.completed_shards) - self.candidate_shards
         
-        """
-            TODO: UPDATE CANDIDATE SHARDS
-        """
-        for
-        
-        self.completed_shards += 1
-        if (self.completed_shards == self.total_shards):
+        # check if their dependencies have been resolved
+        for shard in eval_shards:
+            req_tensors = self.shard_to_input_dict[shard]
+            if all(req in self.tensor_dictionary for req in req_tensors):
+                self.candidate_shards.add(shard)
+            
+        if (len(self.completed_shards) == self.total_shards):
             self.get_new_batch()
         
     def get_shard(self, key):
         self.candidate_shards.remove(key)
         shard_task = self.shard_dictionary[key]
-        tensor_requests = self.layer_to_input_dict[key]
+        tensor_requests = self.shard_to_input_dict[key]
         input_tensors = {k: self.tensor_dictionary[k] for k in tensor_requests}
         if shard_task.direction == "b":
-            grad_requests = self.layer_to_output_dict[key]
+            grad_requests = self.shard_to_output_dict[key]
             grad_tensors = {k: self.grad_dictionary[k] for k in tensor_requests}
         else:
             grad_tensors = None

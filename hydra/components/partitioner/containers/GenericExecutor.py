@@ -100,7 +100,6 @@ class GenericExecutor(nn.Module):
     def backward(self, in_tensor_dict, grad_tensor_dict):
         successful_pass = False
         for key, value in in_tensor_dict: 
-            
             # if it's not the initial batch
             rq = False
             if not (isinstance(key, str) and "batch" in key):

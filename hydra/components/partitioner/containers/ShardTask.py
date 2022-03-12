@@ -31,18 +31,28 @@ import torch
 
 class ShardTask():
 
-    def __init__(self, model, executor, direction, time_taken, idx, lr):
+    def __init__(self, model, direction, lr):
         self.lr = lr
         self.model = model
         self.direction = direction
-        self.time_cost = time_taken
-        self.idx = idx
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr = self.lr)
-        self.executor = executor
-    
-    def run(self, tensor_dictionary, gradient_tensor_dictionary=None):
+
+    def run(self, device, tensor_dictionary, gradient_tensor_dictionary=None):
+        self.model.to(device, non_blocking=True)
+        f_keys = tensor_dictionary.keys()
+        for key in f_keys:
+            tensor_dictionary[key] = tensor_dictionary[key].to(device)
+        
         if self.direction == "f":
-            self.model.forward(tensor_dictionary)
+            vals = self.model.forward(tensor_dictionary)
         else:
-            self.model.backward(tensor_dictionary, gradient_tensor_dictionary)
+            b_keys = tensor_dictionary.keys()
+            for key in b_keys:
+                gradiend_tensor_dictionary[key] = gradient_tensor_dictionary[key].to(device)
+            
+            
+            vals = self.model.backward(tensor_dictionary, gradient_tensor_dictionary)
             self.optimizer.step()
+            
+        self.model.to("cpu", non_blocking=True)
+        return vals
