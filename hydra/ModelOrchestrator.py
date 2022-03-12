@@ -40,18 +40,16 @@ thread_lock = threading.Lock()
 
 class ModelOrchestrator():
     def __init__(self, tasks):
-        available_gpus = min(torch.cuda.device_count(), len(tasks))
-        self.all_devices = list(range(available_gpus))
-        self.available_devices = list(range(available_gpus))
+        available_gpus = 
+        self.all_devices = [ torch.device("cuda:{}".format(idx)) for idx in range(torch.cuda.device_count()) ]
+        self.available_devices = copy.copy(self.all_devices)
         self.active_devices = []
-        self.verbose = 0
         self.tasks = copy.copy(tasks)
         self.idle_tasks = copy.copy(tasks)
         for i in self.tasks:
             i.global_timer = global_timer
         self.active_tasks = []
         self.cached_tasks = []
-        self.buffer = None
         self.sleep_event = threading.Event()
         self.thread_pool = concurrent.futures.ThreadPoolExecutor()
 
@@ -102,7 +100,7 @@ class ModelOrchestrator():
             else:
                 model_task.update_task(chosen_shard_index, ret_grad_dictionary=returned_tensors)
                 
-            if model_task.epochs < 0:
+            if model_task.epochs <= 0:
                 self.tasks.remove(model_task)
                 print("Task {} has finished at time {}.".format(chosen_task.name, timer()-global_timer))
             else:
@@ -128,34 +126,24 @@ class ModelOrchestrator():
     
    
     def train_models(self):
-        print("TRAINING STARTS")
-        
-        ctr = 0
+        print("****************************TRAINING STARTS***************************************")
         cache_task = None # use this to try and "guess" the next task's completion time for that shard.
         cache_device = None
-        CACHE_SYSTEM = True
         self.cached_tasks = [None for x in range(len(self.all_devices))]
-        running_tasks = [None for x in range(len(self.all_devices))]
-        
+        running_tasks = {}
         global thread_lock
         
         
-        # initial run
-        
-        
-        
+        # select initial tasks
         for chosen_device in self.all_devices:
-            task_times = [(i.total_time * i.batches_remaining) + i.total_length * i.total_time * i.epochs for i in self.idle_tasks]
+            task_times = [(i.mini_batch_time * i.batches_remaining) + (i.mini_batch_time * i.total_length * i.epochs) for i in self.idle_tasks]
             chosen_task = self.idle_tasks[np.argmax(task_times)]
-
             self.lock_device(chosen_device)
-            chosen_task.setup_timing(chosen_device)
             self.active_tasks.append(chosen_task)
             running_tasks[chosen_device] = chosen_task
             chosen_shard = chosen_task.get_shard()
             
             self.idle_tasks.remove(chosen_task)
-            #print("Training task {}".format(chosen_task.name))
             self.thread_pool.submit(self.train_shard_on_device, chosen_task, chosen_shard, chosen_device)
         #print(self.active_devices)
 

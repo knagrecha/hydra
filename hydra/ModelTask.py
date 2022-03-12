@@ -119,7 +119,7 @@ class ModelTask():
         #self.model = model
         #self.forward_shards = []
         #self.backward_shards = []
-        
+         
         self.remaining_runtime = 0
         self.partitioner = partitioner
         
@@ -136,7 +136,7 @@ class ModelTask():
         self.minibatches_remaining = len(dataloader)
         self.verbose = verbose
 
-        self.batch_time = 0
+        self.mini_batch_time = 0
 
         self.last_mini_time = 0
         self.last_runtime = 0
@@ -144,11 +144,11 @@ class ModelTask():
         
         self.blocked_devices = []
         
-    def setup(self, buffer=None, shard_dictionary=None, shard_to_input_dict=None, batch_time=None):
+    def setup(self, buffer=None, shard_dictionary=None, shard_to_input_dict=None, mini_batch_time=None):
         if shard_dictionary is not None:
             self.shard_dictionary = shard_dictionary
             self.shard_to_input_dict = shard_to_input_dict
-            self.batch_time = batch_time
+            self.mini_batch_time = mini_batch_time
         else:
             # generate shards and expected minibatch runtime
             self.shard_dictionary, self.shard_to_input_dict, self.shard_to_output_dict, self.batch_time = self.partitioner.shard(
@@ -162,10 +162,11 @@ class ModelTask():
             shard.model = shard.model.cpu()
             
         self.get_new_batch()
-    def get_new_batch(self):
         
+    def get_new_batch(self):
         # Reset the tensor dictionary and gradient dictionary
         self.tensor_dictionary = {}
+        self.candidate_shards = {}
         self.completed_shards = {}
         self.grad_dictionary = {"END": None}
         
@@ -201,13 +202,15 @@ class ModelTask():
         else:
             self.tensor_dictionary["label_0"] = label 
             
+        self.update_task()
+            
     """
         Updates the ModelTask. Should be called after each shard completion.
     """
-    def update_task(self, completed_index, ret_tensor_dictionary=None, ret_grad_dictionary=None):
+    def update_task(self, completed_index=None, ret_tensor_dictionary=None, ret_grad_dictionary=None):
         
-        self.completed_shards.add(completed_index)
-        
+        if completed_index is not None:
+            self.completed_shards.add(completed_index)
         if ret_tensor_dictionary is not None:
             self.tensor_dictionary.update(ret_tensor_dictionary)
         if ret_grad_dictionary is not None:
@@ -218,9 +221,14 @@ class ModelTask():
         
         # check if their dependencies have been resolved
         for shard in eval_shards:
-            req_tensors = self.shard_to_input_dict[shard]
-            if all(req in self.tensor_dictionary for req in req_tensors):
-                self.candidate_shards.add(shard)
+            if shard.direction == "f":
+                req_tensors = self.shard_to_input_dict[shard]
+                if all(req in self.tensor_dictionary for req in req_tensors):
+                    self.candidate_shards.add(shard)
+            else:
+                req_tensors = self.shard_to_output_dict[shard]
+                if all(req in self.grad_dictionary for req in req_tensors):
+                    self.candidate_shards.add(shard)
             
         if (len(self.completed_shards) == self.total_shards):
             self.get_new_batch()
