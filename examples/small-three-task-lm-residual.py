@@ -60,12 +60,14 @@ def collate_batch(batch_data, batch_size, mask_frac, mask_id, cls_id):
 """
 
 def pretraining_loss(out, targets):
+    print("OUT: {}".format(out))
+    print("TARGETS: {}".format(targets))
     lm_mask, label = targets
     out = torch.stack([out[i] for i in range(lm_mask.size(0)) if lm_mask[i]])
     loss_computer = torch.nn.CrossEntropyLoss()
     out = out.view(-1, 28783)
     label = label.to(out.device)
-
+    
     return loss_computer(out, label)
 
 
@@ -193,55 +195,71 @@ def get_model(name):
         0: ["batch_0"]
     }
     
+    
+    model_task = ModelTask(name, layer_dictionary, io_dictionary, get_data_loader_train(32), 0.001, 4)
+    
+    output_keys = ["batch_0"] + list(range(0, 30)) # the tensors that have forward receivers. 29's forward receiver is injected
+                                                   # by the modelTask
+    
     local_dictionary_0 = {idx: layer_dictionary[idx] for idx in range(0, 10)}
     local_input_dictionary_0 = {idx: io_dictionary[idx] for idx in range(0, 10)}
+    #local_output_dictionary_0 = {output_keys[idx]: model_task.layer_to_output_dict[output_keys[idx]] for idx in range(0, 10)}
+    #print(local_input_dictionary_0)
 
-    gen_0 = containers.GenericExecutor(local_dictionary_0, local_input_dictionary_0)
-    sh_0_f = containers.ShardTask(gen_0, "f", 0.001)
-    sh_0_b = containers.ShardTask(gen_0, "b", 0.001)
-    
+
     local_dictionary_1 = {idx: layer_dictionary[idx] for idx in range(10, 20)}
     local_input_dictionary_1 = {idx: io_dictionary[idx] for idx in range(10, 20)}
-    gen_1 = containers.GenericExecutor(local_dictionary_1, local_input_dictionary_1)
-    sh_1_f = containers.ShardTask(gen_1, "f", 0.001)
-    sh_1_b = containers.ShardTask(gen_1, "b", 0.001)
+    #local_output_dictionary_1 = {output_keys[idx]: model_task.layer_to_output_dict[output_keys[idx]] for idx in range(10, 20)}
+    #print(local_output_dictionary_1)
+    
     
     local_dictionary_2 = {idx: layer_dictionary[idx] for idx in range(20, 30)}
     local_input_dictionary_2 = {idx: io_dictionary[idx] for idx in range(20, 30)}
-    gen_2 = containers.GenericExecutor(local_dictionary_2, local_input_dictionary_2)
-    sh_2_f = containers.ShardTask(gen_2, "f", 0.001)
-    sh_2_b = containers.ShardTask(gen_2, "b", 0.001)
+    #local_output_dictionary_2 = {output_keys[idx]: model_task.layer_to_output_dict[output_keys[idx]] for idx in range(20, 31)}
+    #print(local_output_dictionary_2)
     
-    shard_dictionary = {
-        0: sh_0_f,
-        1: sh_1_f,
-        2: sh_2_f,
-        3: sh_2_b,
-        4: sh_1_b,
-        5: sh_0_b
-    }
+    
+    
+    
     
     shard_to_input_dict = {
         0: ["batch_0"],
         1: [9],
-        2: [19],
-        3: [19],
-        4: [9],
-        5: ["batch_0"]
+        2: [19, "label_0"],
+        3: [9],
+        4: ["batch_0"]
     }
     
     shard_to_output_dict = {
-        0: [1],
-        1: [2],
+        0: [9],
+        1: [19],
         2: ["END"],
-        3: ["END"],
-        4: [2],
-        5: [1]
+        3: [19],
+        4: [9]
     }
+    
+    gen_0 = containers.GenericExecutor(local_dictionary_0, local_input_dictionary_0, shard_to_output_dict[0])
+    sh_0_f = containers.ShardTask(gen_0, "f", 0.001)
+    sh_0_b = containers.ShardTask(gen_0, "b", 0.001)
+    
+    gen_1 = containers.GenericExecutor(local_dictionary_1, local_input_dictionary_1, shard_to_output_dict[1])
+    sh_1_f = containers.ShardTask(gen_1, "f", 0.001)
+    sh_1_b = containers.ShardTask(gen_1, "b", 0.001)
+    
+    
+    gen_2 = containers.GenericExecutor(local_dictionary_2, local_input_dictionary_2, shard_to_output_dict[2])
+    sh_2_b = containers.ShardTask(gen_2, "b", 0.001)
         
     mini_batch_time = 2.5
     
-    model_task = ModelTask(name, layer_dictionary, io_dictionary, get_data_loader_train(32), 0.001, 4)
+    shard_dictionary = {
+        0: sh_0_f,
+        1: sh_1_f,
+        2: sh_2_b,
+        3: sh_1_b,
+        4: sh_0_b
+    }
+    
     model_task.setup(None, shard_dictionary, shard_to_input_dict, shard_to_output_dict, mini_batch_time)
     return model_task
 

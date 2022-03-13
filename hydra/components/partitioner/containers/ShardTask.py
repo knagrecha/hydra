@@ -46,9 +46,10 @@ class ShardTask():
         if self.direction == "f":
             vals = self.model.forward(tensor_dictionary)
         else:
-            b_keys = tensor_dictionary.keys()
+            b_keys = gradient_tensor_dictionary.keys()
             for key in b_keys:
-                gradient_tensor_dictionary[key] = gradient_tensor_dictionary[key].to(device)
+                if gradient_tensor_dictionary[key] is not None:
+                    gradient_tensor_dictionary[key] = gradient_tensor_dictionary[key].to(device)
             
             
             vals = self.model.backward(tensor_dictionary, gradient_tensor_dictionary)
