@@ -12,7 +12,6 @@
 # ==============================================================================
 
 import torch.nn as nn
-from .utilities import get_free_space
 
 import gc
 
@@ -30,15 +29,16 @@ import torch
 
 
 class GenericExecutor(nn.Module):
-    def __init__(self, layer_dictionary, input_dictionary, reverse_input_dictionary):
+    def __init__(self, layer_dictionary, input_dictionary):
         super(GenericExecutor, self).__init__()
         
         self.layer_dictionary = layer_dictionary
         self.input_dictionary = input_dictionary
-        self.reverse_input_dictionary = reverse_input_dictionary
         
-        for key, value in layer_dictionary:
-            self.add_module("Module_{}".format(key), value)
+        
+        for key, value in self.layer_dictionary.items():
+            if (isinstance(value, nn.Module)):
+                self.add_module("Module_{}".format(key), value)
 
     """
         Forward pass will continue to run until no internal layer-input match can be found.
@@ -51,7 +51,7 @@ class GenericExecutor(nn.Module):
             while not successful_pass:
                 marked_for_deletion = []
                 # for every received provider, tensor
-                for key, value in tensor_dictionary:
+                for key, value in tensor_dictionary.items():
                     if key in self.input_dictionary: # check if the provider has a 
                                                         # corresponding recipient layer in this model
                         recipient_layers = self.input_dictionary[key] # identify receiving layers
@@ -99,7 +99,7 @@ class GenericExecutor(nn.Module):
     
     def backward(self, in_tensor_dict, grad_tensor_dict):
         successful_pass = False
-        for key, value in in_tensor_dict: 
+        for key, value in in_tensor_dict.items(): 
             # if it's not the initial batch
             rq = False
             if not (isinstance(key, str) and "batch" in key):

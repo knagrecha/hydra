@@ -40,22 +40,22 @@ thread_lock = threading.Lock()
 
 class ModelOrchestrator():
     def __init__(self, tasks):
-        available_gpus = 
-        self.all_devices = [ torch.device("cuda:{}".format(idx)) for idx in range(torch.cuda.device_count()) ]
-        self.available_devices = copy.copy(self.all_devices)
-        self.active_devices = []
-        self.tasks = copy.copy(tasks)
-        self.idle_tasks = copy.copy(tasks)
+        self.all_devices = [ torch.device("cuda:{}".format(idx)) for idx in range(torch.cuda.device_count()) ] # all devices
+        self.available_devices = copy.copy(self.all_devices) # "empty" devices
+        self.active_devices = [] # currently active devices
+        self.tasks = copy.copy(tasks) # list of tasks
+        self.idle_tasks = copy.copy(tasks) # list of idle tasks
+        
+        # setup basal timers
         for i in self.tasks:
-            i.global_timer = global_timer
-        self.active_tasks = []
-        self.cached_tasks = []
+            i.global_timer = global_timer 
+            
+        self.active_tasks = {k: (None, None) for k in self.all_devices} # currently active (task, shard) tuple by device
+        # currently cached (task, shard, in_tensors, grad_tensors, key) by 
+        self.cached_tasks = {k: (None, None, None, None, None) for k in self.all_devices}
         self.sleep_event = threading.Event()
         self.thread_pool = concurrent.futures.ThreadPoolExecutor()
 
-        
-    def generate(self):
-        self.setup_all_models()
 
     def log(self, message):
         if self.verbose == 1:
@@ -127,148 +127,90 @@ class ModelOrchestrator():
    
     def train_models(self):
         print("****************************TRAINING STARTS***************************************")
-        cache_task = None # use this to try and "guess" the next task's completion time for that shard.
-        cache_device = None
-        self.cached_tasks = [None for x in range(len(self.all_devices))]
-        running_tasks = {}
         global thread_lock
         
         
         # select initial tasks
         for chosen_device in self.all_devices:
-            task_times = [(i.mini_batch_time * i.batches_remaining) + (i.mini_batch_time * i.total_length * i.epochs) for i in self.idle_tasks]
+            task_times = [(i.mini_batch_time * i.minibatches_remaining) + (i.mini_batch_time * i.total_length * i.epochs) for i in self.idle_tasks]
             chosen_task = self.idle_tasks[np.argmax(task_times)]
             self.lock_device(chosen_device)
-            self.active_tasks.append(chosen_task)
-            running_tasks[chosen_device] = chosen_task
-            chosen_shard = chosen_task.get_shard()
-            
+            # TODO: Introduce some kind of actual selection process
+            chosen_key, chosen_shard, in_tensors, grad_tensors = chosen_task.get_shard_blind() # get the first candidate 
+            self.active_tasks[chosen_device] = (chosen_task, chosen_key)
             self.idle_tasks.remove(chosen_task)
-            self.thread_pool.submit(self.train_shard_on_device, chosen_task, chosen_shard, chosen_device)
-        #print(self.active_devices)
+            self.thread_pool.submit(self.train_shard_on_device, chosen_shard, chosen_task, 
+                                    in_tensors, grad_tensors, chosen_device, chosen_key)
 
-        if CACHE_SYSTEM:
-         # recalculate cached shards
-            considerables = self.idle_tasks.copy()
-            for active_device in self.active_devices:
-                active_task = running_tasks[active_device]
-                if (len(active_task.queue) > 0):
-                    #print("active task does NOT finish this cycle")
-                    considerables.append(active_task)
+        # Initial Double Buffer selection
+        candidate_tasks = [t for t in self.tasks if len(t.candidate_shards) > 0] # selection candidates
+        for device in self.all_devices: 
+            lrt = -1 # Sharded-LRTF selection - start by calculating LRT
+            cache_task = None
+            for candidate in candidate_tasks:
+                task_time = ((candidate.mini_batch_time * candidate.minibatches_remaining) + 
+                                 (candidate.mini_batch_time * candidate.total_length * candidate.epochs))
+                if task_time > lrt:
+                    lrt = task_time
+                    cache_task = candidate
 
-                lrt = -1
-                cache_task = None
-                #print("Considering {}".format(considerables))
-                for i in considerables:
-                    if (len(i.queue) > 0):
-                        task_time = (i.total_time * i.batches_remaining ) + i.total_length * i.total_time * i.epochs
-                        if task_time > lrt:
-                            lrt = task_time
-                            cache_task = i
-                    
-                if cache_task is not None:
-                    if (cache_task.queue_len > 1):
-                        cache_task.queue[0].model.to("cuda:{0}".format(active_device), non_blocking=True)
-                    considerables.remove(cache_task)
-                    self.cached_tasks[active_device] = cache_task
+            if cache_task is not None:
+                chosen_key, chosen_shard, in_tensors, grad_tensors = cache_task.get_shard_blind() # get the first candidate 
+                self.cached_tasks[device] = (cache_task, chosen_shard, in_tensors, grad_tensors, chosen_key)
+                chosen_shard.model = chosen_shard.model.to("cuda:{0}".format(device), non_blocking=True) # Buffer up the model
+                candidate_tasks.remove(cache_task)
                 
-                if (active_task) in considerables:
-                    considerables.remove(active_task)
-
-        
-        #print(cached_tasks)
-        
         # runtime
         start = timer()
-        old_time = 0
+
+        old_time = 0 # used for printing
         while len(self.tasks) > 0:
+
+            # Output Statements
+
             if (self.verbose == 1 and timer() - old_time > 10):
                 for task in self.tasks:
-                    print(task.name + ": Epoch {}, {} / {} minibatches complete, remaining time (approx.): {:.2f}hrs, last runtime: {:.2f}, last loss: {:.2f} | ".format( task.total_epochs - task.epochs, task.total_length - task.batches_remaining, task.total_length, task.remaining_runtime/3600, task.last_runtime, task.last_loss))
+                    print(task.name + ": Epoch {}, {} / {} minibatches complete, remaining time (approx.): {:.2f}hrs, last runtime: {:.2f}, last loss: {:.2f} | ".format( task.total_epochs - task.epochs, task.total_length - task.minibatches_remaining, task.total_length, task.remaining_runtime/3600, task.last_runtime, task.last_loss))
                 old_time = timer()
+
+
+
             try:
                 self.sleep_event.wait()
                 self.sleep_event.clear()
+
                 if (len(self.tasks) == 0):
                     break
-   
-                if CACHE_SYSTEM and len(self.idle_tasks) > 0:
-                    
-                    holder = self.available_devices.copy()
-                    #print(holder)
-                    temp_active = []
-                    for chosen_device in holder:
-                        chosen_task = self.cached_tasks[chosen_device]
-                        if chosen_task is not None:
-                            self.idle_tasks.remove(chosen_task)
-                            self.lock_device(chosen_device)
-                            chosen_task.setup_timing(chosen_device)
-                            self.active_tasks.append(chosen_task)
-                            chosen_shard = chosen_task.get_shard()
-                            running_tasks[chosen_device] = chosen_task
-                            temp_active.append(chosen_device)
-                            #print("Training {} on {}".format(chosen_task.name, chosen_device))
-                            self.thread_pool.submit(self.train_shard_on_device, chosen_task, chosen_shard, chosen_device)
 
-                    # recalculate cached shards
-                    considerables = [x for x in self.idle_tasks if x not in self.cached_tasks]
-                    
-                    #print("Devices needing a cache {}".format(temp_active))
-                    for active_device in temp_active:
-                        
-                        active_task = running_tasks[active_device]
-                        cache_possibles = considerables.copy()
-                        if (len(active_task.queue) > 0):
-                            cache_possibles.append(active_task)
-                        lrt = -1
-                        cache_task = None
-                        #print("Considering {} for device {}".format([task.name for task in cache_possibles], active_device))
-                        if (len(cache_possibles) == 0):
-                            self.cached_tasks[active_device] = None
-                    
-                        for i in cache_possibles:
-                            #print(len(i.queue))
-                            if (len(i.queue) > 0):
-                                task_time = (i.total_time * i.batches_remaining ) + i.total_length * i.total_time * i.epochs
-                                i.remaining_runtime = task_time
-                                if task_time > lrt:
-                                    lrt = task_time
-                                    cache_task = i
-                        #print("CACHING {} to {}".format(cache_task.name, active_device))
-                        if cache_task is not None:
-                            
+                # for each free device
+                for device in self.available_devices:
 
+                    # trigger buffered tasks
+                    cache_task, chosen_shard, in_tensors, grad_tensors, chosen_key = self.cached_tasks[device]
+                    if cache_task is not None:
+                        self.idle_tasks.remove(cache_task)
+                        self.lock_device(device)
+                        self.active_tasks[device] = (cache_task, chosen_key)
+                        temp_active.append(chosen_device)
+                        self.thread_pool.submit(self.train_shard_on_device, chosen_shard, cache_task, 
+                                    in_tensors, grad_tensors, chosen_device, chosen_key)
 
-                            if (cache_task.queue_len > 1 and cache_task.my_device != active_device):
-                                cache_task.queue[0].model.to("cuda:{0}".format(active_device), non_blocking=True)
+                    # replace buffered tasks
+                    candidate_tasks = [t for t in self.tasks if len(t.candidate_shards) > 0] # selection candidates
+                    lrt = -1 # Sharded-LRTF selection - start by calculating LRT
+                    cache_task = None
+                    for candidate in candidate_tasks:
+                        task_time = ((candidate.mini_batch_time * candidate.minbatches_remaining) + 
+                                         (candidate.mini_batch_time * candidate.total_length * candidate.epochs))
+                        if task_time > lrt:
+                            lrt = task_time
+                            cache_task = candidate
 
-                            self.cached_tasks[active_device] = cache_task
-                            if cache_task in considerables:
-                                considerables.remove(cache_task)
-                        else:
-                            self.cached_tasks[active_device] = None
-                    
-                else:
-                    
-                    holder = self.available_devices.copy()
-                    for chosen_device in holder:
-                        lrt = -1
-                        #print(self.idle_tasks)
-                        if (len(self.idle_tasks) != 0):
-                            for i in self.idle_tasks:
-                                task_time = (i.total_time * i.batches_remaining) + i.total_length * i.total_time * i.epochs
-                                if task_time > lrt:
-                                    lrt = task_time
-                                    chosen_task = i
+                    if cache_task is not None:
+                        chosen_key, chosen_shard, in_tensors, grad_tensors = cache_task.get_shard_blind() # get the first candidate 
+                        self.cached_tasks[device] = (cache_task, chosen_shard, in_tensors, grad_tensors, chosen_key)
+                        chosen_shard.model = chosen_shard.model.to("cuda:{0}".format(device), non_blocking=True) # Buffer up the model
 
-                            self.idle_tasks.remove(chosen_task)
-                            self.lock_device(chosen_device)
-                            chosen_task.setup_timing(chosen_device)
-                            self.active_tasks.append(chosen_task)
-                            chosen_shard = chosen_task.get_shard()
-                            #print("Training {} on {}".format(chosen_task.name, chosen_device))
-                            self.thread_pool.submit(self.train_shard_on_device, chosen_task, chosen_shard, chosen_device)
-                #thread_lock.release()
             except KeyboardInterrupt:
                 if thread_lock.locked():
                     thread_lock.release()
@@ -280,7 +222,7 @@ class ModelOrchestrator():
                 print()
                 print("TOTAL TIME TAKEN: {}".format(end - start))
 
-                
+
                 sys.exit(0)
 
             

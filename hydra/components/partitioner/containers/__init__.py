@@ -1,2 +1,2 @@
-from .ShardModel import ShardModel
-from .ShardedTask import ShardedTask
+from .GenericExecutor import GenericExecutor
+from .ShardTask import ShardTask

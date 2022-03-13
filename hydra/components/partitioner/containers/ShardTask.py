@@ -48,7 +48,7 @@ class ShardTask():
         else:
             b_keys = tensor_dictionary.keys()
             for key in b_keys:
-                gradiend_tensor_dictionary[key] = gradient_tensor_dictionary[key].to(device)
+                gradient_tensor_dictionary[key] = gradient_tensor_dictionary[key].to(device)
             
             
             vals = self.model.backward(tensor_dictionary, gradient_tensor_dictionary)

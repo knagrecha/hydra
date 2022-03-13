@@ -18,7 +18,6 @@ from timeit import default_timer as timer
 from hydra.utilities import get_free_space
 import numpy as np
 from torch import multiprocessing as multiprocessing
-from hydra.components.partitioner import Pilot
 from collections import defaultdict
 
 class ModelTask():
@@ -71,7 +70,7 @@ class ModelTask():
         # any key's value. They do not output to anyone
         
         # essentially invert the dictionary
-        for key, value in self.layer_to_input_dict:
+        for key, value in self.layer_to_input_dict.items():
             for val in value:
                 self.layer_to_output_dict[val].append(key)
                 
@@ -107,12 +106,13 @@ class ModelTask():
             dependencies resolved. At each shard completion, 
             we update resolved dependencies.
         """
-        self.candidate_shards = {} 
-        self.completed_shards = {} # how many shards have been run
-        self.total_shards = self.shard_dictionary.keys() # how many shards to run overall
+        self.candidate_shards = set()
+        
+        self.completed_shards = set() # how many shards have been run
         
         
-        self.global_timer = global_timer # used to identify running times
+        
+        self.global_timer = 0 # used to identify running times
         self.name = name # used in debugging
         
         
@@ -121,13 +121,13 @@ class ModelTask():
         #self.backward_shards = []
          
         self.remaining_runtime = 0
-        self.partitioner = partitioner
+        #self.partitioner = partitioner
         
         
         self.lr = lr
         self.total_epochs = epochs
         self.epochs = epochs
-        self.criterion = criterion
+        #self.criterion = criterion
         self.batch_size = dataloader.batch_size
         
         self._old_data = dataloader
@@ -144,10 +144,11 @@ class ModelTask():
         
         self.blocked_devices = []
         
-    def setup(self, buffer=None, shard_dictionary=None, shard_to_input_dict=None, mini_batch_time=None):
+    def setup(self, buffer=None, shard_dictionary=None, shard_to_input_dict=None, shard_to_output_dict=None, mini_batch_time=None):
         if shard_dictionary is not None:
             self.shard_dictionary = shard_dictionary
             self.shard_to_input_dict = shard_to_input_dict
+            self.shard_to_output_dict = shard_to_output_dict
             self.mini_batch_time = mini_batch_time
         else:
             # generate shards and expected minibatch runtime
@@ -158,16 +159,18 @@ class ModelTask():
                                                                             self.lr, 
                                                                             self.verbose
                                                                             )
-        for shard in self.queue:
+        for key, shard in self.shard_dictionary.items():
             shard.model = shard.model.cpu()
+            
+        self.total_shards = self.shard_dictionary.keys() # which shards to run overall
             
         self.get_new_batch()
         
     def get_new_batch(self):
         # Reset the tensor dictionary and gradient dictionary
         self.tensor_dictionary = {}
-        self.candidate_shards = {}
-        self.completed_shards = {}
+        self.candidate_shards = set()
+        self.completed_shards = set()
         self.grad_dictionary = {"END": None}
         
         # Time between last minibatch completion and this one
@@ -212,6 +215,8 @@ class ModelTask():
         if completed_index is not None:
             self.completed_shards.add(completed_index)
         if ret_tensor_dictionary is not None:
+            if "END" in ret_tensor_dictionary:
+                self.last_loss = ret_tensor_dictionary["END"].item()
             self.tensor_dictionary.update(ret_tensor_dictionary)
         if ret_grad_dictionary is not None:
             self.grad_dictionary.update(ret_grad_dictionary)
@@ -221,7 +226,7 @@ class ModelTask():
         
         # check if their dependencies have been resolved
         for shard in eval_shards:
-            if shard.direction == "f":
+            if self.shard_dictionary[shard].direction == "f":
                 req_tensors = self.shard_to_input_dict[shard]
                 if all(req in self.tensor_dictionary for req in req_tensors):
                     self.candidate_shards.add(shard)
@@ -232,6 +237,9 @@ class ModelTask():
             
         if (len(self.completed_shards) == self.total_shards):
             self.get_new_batch()
+            
+        
+        
         
     def get_shard(self, key):
         self.candidate_shards.remove(key)
@@ -245,3 +253,16 @@ class ModelTask():
             grad_tensors = None
             
         return shard_task, input_tensors, grad_tensors
+    
+    def get_shard_blind(self):
+        key = self.candidate_shards.pop()
+        shard_task = self.shard_dictionary[key]
+        tensor_requests = self.shard_to_input_dict[key]
+        input_tensors = {k: self.tensor_dictionary[k] for k in tensor_requests}
+        if shard_task.direction == "b":
+            grad_requests = self.shard_to_output_dict[key]
+            grad_tensors = {k: self.grad_dictionary[k] for k in grad_requests}
+        else:
+            grad_tensors = None
+
+        return key, shard_task, input_tensors, grad_tensors
