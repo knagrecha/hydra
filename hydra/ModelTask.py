@@ -238,9 +238,7 @@ class ModelTask():
         "Planned" candidates after shard key completes. Doesn't affect any class variables.
     """
     def get_expected_update(self, key):
-
         gen_shard = self.shard_dictionary[key]
-        
         f_expected_total, b_expected_total = set(self.tensor_dictionary.keys()), set(self.grad_dictionary.keys())
         if gen_shard.direction == "f":
             expected_outs = self.shard_to_output_dict[key] # the intermediates the active shard will spit out
@@ -251,8 +249,6 @@ class ModelTask():
             b_expected_total.update(expected_outs)
             eval_shards = (self.total_shards - self.completed_shards) - self.candidate_shards  - self.blocked_shards
             
-
-        
         possibles = copy.copy(self.candidate_shards)
         for shard in eval_shards:
             if self.shard_dictionary[shard].direction == "f":
@@ -266,7 +262,6 @@ class ModelTask():
                     possibles.add(shard)
                     
         return possibles
-
     """
         Will be called for buffering. Blacklists this shard from being selected in future scheduling until minibatch
         finishes.

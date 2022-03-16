@@ -198,22 +198,40 @@ class ModelOrchestrator():
                     break
                 # for each free device
                 for device in self.available_devices:
-                    # trigger buffered tasks
+                    # trigger buffered tasks if available
                     cache_task, chosen_shard, chosen_key = self.cached_tasks[device]
-                    in_tensors, grad_tensors = cache_task.get_shard_inputs(chosen_key)
                     if cache_task is not None:
-                        self.idle_tasks.remove(cache_task)
+                    
+                        in_tensors, grad_tensors = cache_task.get_shard_inputs(chosen_key)
+                        if cache_task is not None:
+                            self.idle_tasks.remove(cache_task)
+                            self.lock_device(device)
+                            self.active_tasks[device] = (cache_task, chosen_key)
+                            self.cached_tasks[device] = None, None, None
+                            self.thread_pool.submit(self.train_shard_on_device, chosen_shard, cache_task, 
+                                        in_tensors, grad_tensors, device, chosen_key)
+                    
+                    # if no cached task was possible, revert to standard scheduling
+                    else:
+                        candidate_tasks = [t for t in self.tasks if len(t.candidate_shards) > 0] # selection candidates
+                        task_times = [(i.mini_batch_time * i.minibatches_remaining) + (i.mini_batch_time * i.total_length * i.epochs) for i in candidate_tasks]
+                        chosen_task = candidate_tasks[np.argmax(task_times)]
                         self.lock_device(device)
-                        self.active_tasks[device] = (cache_task, chosen_key)
-                        self.thread_pool.submit(self.train_shard_on_device, chosen_shard, cache_task, 
-                                    in_tensors, grad_tensors, device, chosen_key)
+                        chosen_key, chosen_shard = chosen_task.get_shard_blind() # get the first candidate 
+                        in_tensors, grad_tensors = chosen_task.get_shard_inputs(chosen_key)
+                        self.active_tasks[device] = (chosen_task, chosen_key)
+                        candidate_tasks.remove(chosen_task)
+                        self.thread_pool.submit(self.train_shard_on_device, chosen_shard, chosen_task, 
+                                                in_tensors, grad_tensors, device, chosen_key)
 
-                    # Replace buffers
+                        
+                    # Replace buffers for this device
                     candidate_tasks = []
                     active_task_specific_shard_pool = None # shards of same task that will be valid after current shard
                     for t in self.tasks:
                         if t == self.active_tasks[device][0]:
                             active_task_specific_shard_pool = t.get_expected_update(self.active_tasks[device][1])
+                           
                             if len(active_task_specific_shard_pool) > 0:
                                 candidate_tasks.append(t) # selection candidates
                         else:
@@ -222,6 +240,8 @@ class ModelOrchestrator():
                                 
                     lrt = -1 # Sharded-LRTF selection - start by calculating LRT
                     cache_task = None
+                    
+                    
                     for candidate in candidate_tasks:
                         task_time = ((candidate.mini_batch_time * candidate.minibatches_remaining) + 
                                          (candidate.mini_batch_time * candidate.total_length * candidate.epochs))
@@ -230,9 +250,11 @@ class ModelOrchestrator():
                             cache_task = candidate
 
                     if cache_task is not None:
+                        
+                        # if caching from same model
                         if cache_task == self.active_tasks[device][0]:
                             chosen_key = active_task_specific_shard_pool.pop()
-                            chosen_shard = cache_task.get_shard(chosen_key)
+                                                        chosen_shard = cache_task.get_shard(chosen_key)
                         else:
                             chosen_key, chosen_shard = cache_task.get_shard_blind() # get the first candidate 
                         self.cached_tasks[device] = (cache_task, chosen_shard, chosen_key)
