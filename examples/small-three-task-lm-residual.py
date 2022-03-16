@@ -198,41 +198,28 @@ def get_model(name):
     output_keys = ["batch_0"] + list(range(0, 30)) # the tensors that have forward receivers. 29's forward receiver is injected
                                                    # by the modelTask
     
-    local_dictionary_0 = {idx: layer_dictionary[idx] for idx in range(0, 10)}
-    local_input_dictionary_0 = {idx: io_dictionary[idx] for idx in range(0, 10)}
+    local_dictionary_0 = {idx: layer_dictionary[idx] for idx in range(0, 16)}
+    local_input_dictionary_0 = {idx: io_dictionary[idx] for idx in range(0, 16)}
     #local_output_dictionary_0 = {output_keys[idx]: model_task.layer_to_output_dict[output_keys[idx]] for idx in range(0, 10)}
     #print(local_input_dictionary_0)
 
 
-    local_dictionary_1 = {idx: layer_dictionary[idx] for idx in range(10, 20)}
-    local_input_dictionary_1 = {idx: io_dictionary[idx] for idx in range(10, 20)}
+    local_dictionary_1 = {idx: layer_dictionary[idx] for idx in range(16, 30)}
+    local_input_dictionary_1 = {idx: io_dictionary[idx] for idx in range(16, 30)}
     #local_output_dictionary_1 = {output_keys[idx]: model_task.layer_to_output_dict[output_keys[idx]] for idx in range(10, 20)}
     #print(local_output_dictionary_1)
     
-    
-    local_dictionary_2 = {idx: layer_dictionary[idx] for idx in range(20, 30)}
-    local_input_dictionary_2 = {idx: io_dictionary[idx] for idx in range(20, 30)}
-    #local_output_dictionary_2 = {output_keys[idx]: model_task.layer_to_output_dict[output_keys[idx]] for idx in range(20, 31)}
 
-    
-    
-    
-    
-    
     shard_to_input_dict = {
         0: ["batch_0"],
-        1: [9],
-        2: [19, "label_0", "label_1"],
-        3: [9],
-        4: ["batch_0"]
+        1: [15, "label_0", "label_1"],
+        2: ["batch_0"]
     }
     
     shard_to_output_dict = {
-        0: [9],
-        1: [19],
-        2: [29],
-        3: [19],
-        4: [9]
+        0: [15],
+        1: [29],
+        2: [15]
     }
     
     gen_0 = containers.GenericExecutor(local_dictionary_0, local_input_dictionary_0, shard_to_output_dict[0])
@@ -240,21 +227,14 @@ def get_model(name):
     sh_0_b = containers.ShardTask(gen_0, "b", 0.001)
     
     gen_1 = containers.GenericExecutor(local_dictionary_1, local_input_dictionary_1, shard_to_output_dict[1])
-    sh_1_f = containers.ShardTask(gen_1, "f", 0.001)
     sh_1_b = containers.ShardTask(gen_1, "b", 0.001)
-    
-    
-    gen_2 = containers.GenericExecutor(local_dictionary_2, local_input_dictionary_2, shard_to_output_dict[2])
-    sh_2_b = containers.ShardTask(gen_2, "b", 0.001)
         
     mini_batch_time = 2.5
     
     shard_dictionary = {
         0: sh_0_f,
-        1: sh_1_f,
-        2: sh_2_b,
-        3: sh_1_b,
-        4: sh_0_b
+        1: sh_1_b,
+        2: sh_0_b
     }
     
     model_task.setup(None, shard_dictionary, shard_to_input_dict, shard_to_output_dict, mini_batch_time)
@@ -273,7 +253,7 @@ def main():
 
     model_0 = get_model("Model_0")
     model_1 = get_model("Model_1")
-    #model_2 = get_model("Model_2")
+    model_2 = get_model("Model_2")
     """
     print("RUNTIME COMPARISON")
     for model in [model_0, model_1]:
@@ -291,32 +271,51 @@ def main():
         optimizer = torch.optim.SGD(params, lr=0.001)
         
         st = timer()
+        f_times_sum = 0
+        b_times_sum = 0
         for batch, label in dataloader:
-            if (count % 10 == 0):
+            
+            if (count % 1 == 0):
                 print(" {} / {}".format(count, total_count))
+                print("FTIMES: {}".format(f_times_sum))
+                print("BTIMES: {}".format(b_times_sum))
+                f_times_sum = 0
+                b_times_sum = 0
             for key in range(0, 30):
                 if key == 0:
                     model.layer_dictionary[0] = model.layer_dictionary[0].to("cuda:0")
                     batch = batch.to("cuda:0")
+                    st = timer()
                     out = model.layer_dictionary[0](batch)
+                    end = timer()
+                    f_times_sum += end - st
                 elif key == 29:
                     label_0 = label[0].to("cuda:1")
                     label_1 = label[1].to("cuda:1")
+                    st = timer()
                     loss = pretraining_loss(out, label_0, label_1)
                     loss.backward()
                     optimizer.step()
                     for key, shard in model.shard_dictionary.items():
                         shard.model.zero_grad()
                     total_loss += loss.item()
+                    end = timer()
+                    b_times_sum += end - st
                 else:
                     if (key > 15):
                         model.layer_dictionary[key] = model.layer_dictionary[key].to("cuda:1")
                         out = out.to("cuda:1")
+                        st = timer()
                         out = model.layer_dictionary[key] (out)
+                        end = timer()
+                        f_times_sum += end - st
                     else:
                         model.layer_dictionary[key] = model.layer_dictionary[key].to("cuda:0")
                         out = out.to("cuda:0")
+                        st = timer()
                         out = model.layer_dictionary[key] (out)
+                        end = timer()
+                        f_times_sum += end - st
             count+=1
         print("TIME TAKEN: {}".format(timer() - st))
         print("Average batch loss: {}".format(total_loss / len(dataloader)))
@@ -360,17 +359,18 @@ def main():
                 
             print()
             print("Average batch loss: {}".format(total_loss / len(dataloader)))
-    
-    """           
-    
+    """
+        
+   
     # create orchestrator
-    orchestra = ModelOrchestrator([model_0, model_1])
+    orchestra = ModelOrchestrator([model_0])
     orchestra.verbose = 1
 
     st = timer()
     orchestra.train_models()
     print("TIME TAKEN: {}".format(timer() - st))
-    """                                             
+
+    """
     with torch.no_grad():
         for model in [model_0, model_1]:
             total_loss = 0
@@ -399,9 +399,8 @@ def main():
                 count+=1
             print()
             print("Average batch loss: {}".format(total_loss / len(dataloader)))
-            
     """
-    
+
 
 if __name__ == "__main__":
     main()

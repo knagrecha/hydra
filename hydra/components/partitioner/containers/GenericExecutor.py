@@ -14,8 +14,8 @@
 import torch.nn as nn
 import copy
 import gc
-
 import torch
+from timeit import default_timer as timer
 """
     Dictionary-defined executor. Enables Hydra to train 
     arbitrary computational DAGs.
@@ -85,15 +85,19 @@ class GenericExecutor(nn.Module):
                 value.requires_grad_(True)
         
         # run forward, grad enabled
+        st = timer()
         output_dict = self.forward(in_tensor_dict, no_grad=False)
-        
+        end = timer()
+        print("CHECKPOINT TIME: {}".format(end-st))
         
         # get the gradients and outputs
         ret_grads = [grad_tensor_dict[idx] for idx in self.requested_outputs]
         ret_outs = [output_dict[idx] for idx in self.requested_outputs]   
-        
+        st = timer()
         torch.autograd.backward(ret_outs, ret_grads) # backprop
-
+        end = timer()
+        print("CHECKPOINT TIME: {}".format(end-st))
+        
         # record gradients if available
         for key, value in saved_in.items():
             if not ( isinstance(key, str) ):

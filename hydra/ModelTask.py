@@ -180,6 +180,9 @@ class ModelTask():
 
         self.minibatches_remaining -= 1 # decrement minibatch count
         
+        completed_mbs = self.total_length - self.minibatches_remaining
+        if (completed_mbs % 1 == 0):
+            print("MODEL: {}, EPOCH: {}, MBS: {} / {}".format(self.name, self.total_epochs-self.epochs, completed_mbs, self.total_length))
         
         
         # initialize the tensor dictionary with initial minibatch
@@ -202,17 +205,13 @@ class ModelTask():
         Updates the ModelTask. Should be called after each shard completion.
     """
     def update_task(self, completed_index=None, ret_tensor_dictionary=None, ret_grad_dictionary=None):
-        print("SHARD {} of MODEL {} finished".format(completed_index, self.name))
-        
         if completed_index is not None:
             self.completed_shards.add(completed_index)
             
         if ret_tensor_dictionary is not None:
-            print("RET TENSORS".format(ret_tensor_dictionary))
             self.tensor_dictionary.update(ret_tensor_dictionary)
             
         if ret_grad_dictionary is not None:
-            print("RET GRAD TENSORS".format(ret_grad_dictionary))
             self.grad_dictionary.update(ret_grad_dictionary)
         
         # get shards that are not already executed or primed

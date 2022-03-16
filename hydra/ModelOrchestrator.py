@@ -78,24 +78,30 @@ class ModelOrchestrator():
 
             
             returned_tensors = model_shard.run(chosen_device, input_tensors, grad_tensors) # run the model
-            
+        
             # if any of the tensors are requested by a cached shard, then do not move them (mark_saved), otherwise
             # send to CPU
+            st = timer()
             ret_keys = returned_tensors.keys()
             mark_saved = {}
             if returned_tensors:
                 do_save = False
                 for cached_task, cached_shard in self.cached_tasks.items():
                     if cached_task == model_task:
+                        if cached_task.shard_dictionary[cached_shard].model != model_shard.model:
+                            self.model.to("cpu", non_blocking=True)
                         for key in ret_keys:
                             if key in cached_task.shard_to_input_dict[cached_shard]:
                                 mark_saved.add(key)
+                
+                
                 
                 for key in ret_keys:
                     if key not in mark_saved:
                         if returned_tensors[key] is not None:
                             returned_tensors[key] = returned_tensors[key].to("cpu", non_blocking=True)
-
+                end = timer()
+                print("OFFLOAD TIME: {}".format(end-st))
             
             if model_shard.direction == "f":
                 model_task.update_task(chosen_shard_index, ret_tensor_dictionary=returned_tensors)
@@ -130,19 +136,20 @@ class ModelOrchestrator():
         print("****************************TRAINING STARTS***************************************")
         global thread_lock
 
-        candidate_tasks = [t for t in self.tasks if len(t.candidate_shards) > 0] # selection candidates
+        
         # select initial tasks
         for device in self.all_devices:
-            task_times = [(i.mini_batch_time * i.minibatches_remaining) + (i.mini_batch_time * i.total_length * i.epochs) for i in candidate_tasks]
-            chosen_task = candidate_tasks[np.argmax(task_times)]
-            self.lock_device(device)
-            # TODO: Introduce some kind of actual selection process
-            chosen_key, chosen_shard = chosen_task.get_shard_blind() # get the first candidate 
-            in_tensors, grad_tensors = chosen_task.get_shard_inputs(chosen_key)
-            self.active_tasks[device] = (chosen_task, chosen_key)
-            candidate_tasks.remove(chosen_task)
-            self.thread_pool.submit(self.train_shard_on_device, chosen_shard, chosen_task, 
-                                    in_tensors, grad_tensors, device, chosen_key)
+            candidate_tasks = [t for t in self.tasks if len(t.candidate_shards) > 0] # selection candidates
+            if len(candidate_tasks) > 0:
+                task_times = [(i.mini_batch_time * i.minibatches_remaining) + (i.mini_batch_time * i.total_length * i.epochs) for i in candidate_tasks]
+                chosen_task = candidate_tasks[np.argmax(task_times)]
+                self.lock_device(device)
+                # TODO: Introduce some kind of actual selection process
+                chosen_key, chosen_shard = chosen_task.get_shard_blind() # get the first candidate 
+                in_tensors, grad_tensors = chosen_task.get_shard_inputs(chosen_key)
+                self.active_tasks[device] = (chosen_task, chosen_key)
+                self.thread_pool.submit(self.train_shard_on_device, chosen_shard, chosen_task, 
+                                        in_tensors, grad_tensors, device, chosen_key)
 
         for device in self.all_devices:
             # Build initial buffers
@@ -178,17 +185,7 @@ class ModelOrchestrator():
 
             start = timer()
 
-        old_time = 0 # used for printing
         while len(self.tasks) > 0:
-
-            # Output Statements
-
-            if (self.verbose == 1 and timer() - old_time > 10):
-                for task in self.tasks:
-                    print(task.name + ": Epoch {}, {} / {} minibatches complete ".format( task.total_epochs - task.epochs, task.total_length - task.minibatches_remaining, task.total_length))
-                old_time = timer()
-
-
 
             try:
                 self.sleep_event.wait()
@@ -214,15 +211,16 @@ class ModelOrchestrator():
                     # if no cached task was possible, revert to standard scheduling
                     else:
                         candidate_tasks = [t for t in self.tasks if len(t.candidate_shards) > 0] # selection candidates
-                        task_times = [(i.mini_batch_time * i.minibatches_remaining) + (i.mini_batch_time * i.total_length * i.epochs) for i in candidate_tasks]
-                        chosen_task = candidate_tasks[np.argmax(task_times)]
-                        self.lock_device(device)
-                        chosen_key, chosen_shard = chosen_task.get_shard_blind() # get the first candidate 
-                        in_tensors, grad_tensors = chosen_task.get_shard_inputs(chosen_key)
-                        self.active_tasks[device] = (chosen_task, chosen_key)
-                        candidate_tasks.remove(chosen_task)
-                        self.thread_pool.submit(self.train_shard_on_device, chosen_shard, chosen_task, 
-                                                in_tensors, grad_tensors, device, chosen_key)
+                        if (len(candidate_tasks) > 0):
+                            task_times = [(i.mini_batch_time * i.minibatches_remaining) + (i.mini_batch_time * i.total_length * i.epochs) for i in candidate_tasks]
+                            chosen_task = candidate_tasks[np.argmax(task_times)]
+                            self.lock_device(device)
+                            chosen_key, chosen_shard = chosen_task.get_shard_blind() # get the first candidate 
+                            in_tensors, grad_tensors = chosen_task.get_shard_inputs(chosen_key)
+                            self.active_tasks[device] = (chosen_task, chosen_key)
+                            candidate_tasks.remove(chosen_task)
+                            self.thread_pool.submit(self.train_shard_on_device, chosen_shard, chosen_task, 
+                                                    in_tensors, grad_tensors, device, chosen_key)
 
                         
                     # Replace buffers for this device
@@ -254,7 +252,7 @@ class ModelOrchestrator():
                         # if caching from same model
                         if cache_task == self.active_tasks[device][0]:
                             chosen_key = active_task_specific_shard_pool.pop()
-                                                        chosen_shard = cache_task.get_shard(chosen_key)
+                            chosen_shard = cache_task.get_shard(chosen_key)
                         else:
                             chosen_key, chosen_shard = cache_task.get_shard_blind() # get the first candidate 
                         self.cached_tasks[device] = (cache_task, chosen_shard, chosen_key)
