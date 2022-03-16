@@ -172,6 +172,7 @@ class ModelTask():
             del self.dataloader # delete old dataloader
             self.epochs -= 1 # count off an epoch
             self.dataloader = iter(self._old_data) # regenerate the dataloader
+            self.total_length = len(self._old_data)
             self.minibatches_remaining = len(self._old_data) # set the number of minibatches
             batch, label = next(self.dataloader) # get the next minibatch
 

@@ -106,4 +106,4 @@ class GenericExecutor(nn.Module):
                 new_dict[key] = value.grad # define the gradient to be passed back
       
         
-        return new_dict, ret_outs
+        return new_dict

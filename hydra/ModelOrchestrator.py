@@ -174,7 +174,7 @@ class ModelOrchestrator():
 
             if (self.verbose == 1 and timer() - old_time > 10):
                 for task in self.tasks:
-                    print(task.name + ": Epoch {}, {} / {} minibatches complete, last loss: {:.2f} | ".format( task.total_epochs - task.epochs, task.last_loss))
+                    print(task.name + ": Epoch {}, {} / {} minibatches complete ".format( task.total_epochs - task.epochs, task.total_length - task.minibatches_remaining, task.total_length))
                 old_time = timer()
 
 

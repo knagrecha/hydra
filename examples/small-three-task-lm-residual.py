@@ -278,14 +278,15 @@ def main():
             total_loss = 0
             dataloader = get_data_loader(32, train=False)
             print("Evaluating: {}".format(model.name))
-
+            
             out = None
             count = 0
             total_count = len(dataloader)
             for batch, label in dataloader:
+                print(" {} / {}".format(count, total_count), end='\r', flush=True)
                 for key in range(0, 30):
                     if key == 0:
-                        model.layer_dictionary[0] = model.layer_dictionary.to("cuda:0")
+                        model.layer_dictionary[0] = model.layer_dictionary[0].to("cuda:0")
                         batch = batch.to("cuda:0")
                         out = model.layer_dictionary[0](batch)
                     elif key == 29:
@@ -294,7 +295,7 @@ def main():
                         loss = pretraining_loss(out, label_0, label_1)
                         total_loss += loss.item()
                     else:
-                        model.layer_dictionary[key] = model.layer_dictionary.to("cuda:0")
+                        model.layer_dictionary[key] = model.layer_dictionary[key].to("cuda:0")
                         batch = batch.to("cuda:0")
                         out = model.layer_dictionary[key] (out)
                 count+=1
@@ -317,6 +318,7 @@ def main():
             total_count = len(dataloader)
             out = None
             for batch, label in dataloader:
+                print(" {} / {}".format(count, total_count), end='\r', flush=True)
                 for key in range(0, 30):
                     if key == 0:
                         model.layer_dictionary[0] = model.layer_dictionary[0].to("cuda:0")
