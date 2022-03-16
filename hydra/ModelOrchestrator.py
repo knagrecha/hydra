@@ -93,7 +93,8 @@ class ModelOrchestrator():
                 
                 for key in ret_keys:
                     if key not in mark_saved:
-                        returned_tensors[key] = returned_tensors[key].to("cpu", non_blocking=True)
+                        if returned_tensors[key] is not None:
+                            returned_tensors[key] = returned_tensors[key].to("cpu", non_blocking=True)
 
             
             if model_shard.direction == "f":

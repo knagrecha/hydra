@@ -202,13 +202,17 @@ class ModelTask():
         Updates the ModelTask. Should be called after each shard completion.
     """
     def update_task(self, completed_index=None, ret_tensor_dictionary=None, ret_grad_dictionary=None):
+        print("SHARD {} of MODEL {} finished".format(completed_index, self.name))
+        
         if completed_index is not None:
             self.completed_shards.add(completed_index)
             
         if ret_tensor_dictionary is not None:
+            print("RET TENSORS".format(ret_tensor_dictionary))
             self.tensor_dictionary.update(ret_tensor_dictionary)
             
         if ret_grad_dictionary is not None:
+            print("RET GRAD TENSORS".format(ret_grad_dictionary))
             self.grad_dictionary.update(ret_grad_dictionary)
         
         # get shards that are not already executed or primed
@@ -221,7 +225,7 @@ class ModelTask():
                 if all(req in self.tensor_dictionary for req in req_tensors):
                     self.candidate_shards.add(shard)
             else:
-                greq_tensors = self.shard_dictionary[shard].model.requested_outputs
+                greq_tensors = self.shard_to_output_dict[shard]
                 req_tensors = self.shard_to_input_dict[shard]
                 if all(req in self.tensor_dictionary and greq in self.grad_dictionary for req, greq in zip(req_tensors, greq_tensors)):
                     self.candidate_shards.add(shard)
@@ -237,27 +241,30 @@ class ModelTask():
 
         gen_shard = self.shard_dictionary[key]
         
+        f_expected_total, b_expected_total = set(self.tensor_dictionary.keys()), set(self.grad_dictionary.keys())
         if gen_shard.direction == "f":
-            expected_outs = self.shard_to_output_dict[key]
-            expected_total = set(self.tensor_dictionary.keys()) | set(expected_outs) 
+            expected_outs = self.shard_to_output_dict[key] # the intermediates the active shard will spit out
+            f_expected_total.update(expected_outs)
             eval_shards = (self.total_shards - self.completed_shards) - self.candidate_shards - self.blocked_shards
         else:
-            expected_outs = self.shard_to_input_dict[key]
-            expected_total = set(self.grad_dictionary.keys()) | set(expected_outs) 
+            expected_outs = self.shard_to_input_dict[key] # the gradients the active shard will spit out
+            b_expected_total.update(expected_outs)
             eval_shards = (self.total_shards - self.completed_shards) - self.candidate_shards  - self.blocked_shards
             
-            
+
+        
         possibles = copy.copy(self.candidate_shards)
         for shard in eval_shards:
             if self.shard_dictionary[shard].direction == "f":
-                req_tensors = self.shard_to_input_dict[shard]
-                if all(req in expected_total for req in req_tensors):
+                req_tensors = self.shard_to_input_dict[shard] # for this shard to run we need xyz
+                if all(req in f_expected_total for req in req_tensors):
                     possibles.add(shard)
             else:
-                greq_tensors = self.shard_dictionary[shard].model.requested_outputs
+                greq_tensors = self.shard_to_output_dict[shard] # for this shard to run we need xyz
                 req_tensors = self.shard_to_input_dict[shard]
-                if all(req in self.tensor_dictionary and greq in expected_total for req, greq in zip(req_tensors, greq_tensors)):
+                if all(req in f_expected_total and greq in b_expected_total for req, greq in zip(req_tensors, greq_tensors)):
                     possibles.add(shard)
+                    
         return possibles
 
     """
@@ -266,7 +273,6 @@ class ModelTask():
     """
     
     def get_shard(self, key):
-        print("GET MODEL {} SHARD: {}".format(self.name, key))
         self.blocked_shards.add(key)
         self.candidate_shards.discard(key)
         shard_task = self.shard_dictionary[key]
@@ -284,7 +290,7 @@ class ModelTask():
         input_tensors = {k: self.tensor_dictionary[k] for k in tensor_requests}
         if shard_task.direction == "b":
             grad_requests = self.shard_to_output_dict[key]
-            grad_tensors = {k: self.grad_dictionary[k] for k in tensor_requests}
+            grad_tensors = {k: self.grad_dictionary[k] for k in grad_requests}
         else:
             grad_tensors = None
         return input_tensors, grad_tensors
