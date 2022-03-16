@@ -55,6 +55,7 @@ class ModelOrchestrator():
         self.cached_tasks = {k: (None, None, None, None, None) for k in self.all_devices}
         self.sleep_event = threading.Event()
         self.thread_pool = concurrent.futures.ThreadPoolExecutor()
+        self.verbose = 1
 
 
     def log(self, message):
@@ -173,7 +174,7 @@ class ModelOrchestrator():
 
             if (self.verbose == 1 and timer() - old_time > 10):
                 for task in self.tasks:
-                    print(task.name + ": Epoch {}, {} / {} minibatches complete, remaining time (approx.): {:.2f}hrs, last runtime: {:.2f}, last loss: {:.2f} | ".format( task.total_epochs - task.epochs, task.total_length - task.minibatches_remaining, task.total_length, task.remaining_runtime/3600, task.last_runtime, task.last_loss))
+                    print(task.name + ": Epoch {}, {} / {} minibatches complete, last loss: {:.2f} | ".format( task.total_epochs - task.epochs, task.last_loss))
                 old_time = timer()
 
 
@@ -190,7 +191,6 @@ class ModelOrchestrator():
                 
                 # select initial tasks
                 for chosen_device in self.available_devices:
-                    
                     task_times = [(i.mini_batch_time * i.minibatches_remaining) + (i.mini_batch_time * i.total_length * i.epochs) for i in candidate_tasks]
                     
                     chosen_task = candidate_tasks[np.argmax(task_times)]

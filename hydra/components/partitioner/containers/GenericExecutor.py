@@ -12,7 +12,7 @@
 # ==============================================================================
 
 import torch.nn as nn
-
+import copy
 import gc
 
 import torch
@@ -36,7 +36,6 @@ class GenericExecutor(nn.Module):
         self.requested_outputs = set(requested_outputs) # maps input layers to the layers that receive it
         self.input_dictionary = input_dictionary
         
-        
         for key, value in self.layer_dictionary.items():
             if (isinstance(value, nn.Module)):
                 self.add_module("Module_{}".format(key), value)
@@ -51,22 +50,18 @@ class GenericExecutor(nn.Module):
         while not successful_pass:
             # for every received provider, tensor
             update_dictionary = {}
-            print("RECEIVED: {}".format(tensor_dictionary.keys()))
             candidate_layers = {layer for layer in self.all_layers if all(req in tensor_dictionary for req in self.input_dictionary[layer]) } - tensor_dictionary.keys()
             for layer in candidate_layers:
                 requested_inputs = [ tensor_dictionary[req] for req in self.input_dictionary[layer] ]
-                print("Requested inputs length: {}".format(len(requested_inputs)))
                 tensor_dictionary[layer] = self.layer_dictionary[layer](*requested_inputs) # plug in all requested inputs
 
-            if (len(candidate_layers) == 0): # if all recipiients in this shard were exhausted
+            if (len(candidate_layers) == 0): # if all recipients in this shard were exhausted
                 successful_pass = True
-
 
         # clear out unneeded inputs
         remove_keys = tensor_dictionary.keys() - self.requested_outputs
         for key in remove_keys:
             tensor_dictionary.pop(key, None)
-
 
         return tensor_dictionary
         
@@ -86,30 +81,29 @@ class GenericExecutor(nn.Module):
     
     
     
-    def backward(self, in_tensor_dict, grad_tensor_dict):
+    def backward(self, in_tensor_dict, grad_tensor_dict): 
+        saved_in = copy.copy(in_tensor_dict)
         successful_pass = False
-                      
-        print("BACKWARD RECEIVED: {}".format(in_tensor_dict.keys()))
         # if not the initial batch, we need gradients to pass back
         for key, value in in_tensor_dict.items():
-            if not (isinstance(key, str) and "batch" in key):
+            if not ( isinstance(key, str)  ):
                 value.requires_grad_(True)
         
         # run forward, grad enabled
         output_dict = self.forward(in_tensor_dict, no_grad=False)
         
+        
         # get the gradients and outputs
-        ret_grads = [grad_tensor_dict[idx] for idx in requested_outputs]
-        ret_outs = [output_dict[idx] for idx in requested_outputs]   
+        ret_grads = [grad_tensor_dict[idx] for idx in self.requested_outputs]
+        ret_outs = [output_dict[idx] for idx in self.requested_outputs]   
         
         torch.autograd.backward(ret_outs, ret_grads) # backprop
         
+        new_dict = {}
         # record gradients if available
-        for key, value in in_tensor_dict.items():
-            if not (isinstance(key, str) and "batch" in key):
-                print(value.grad)
-                grad_tensor_dict[key] = value.grad # define the gradient to be passed back
-        for g_key in ret_grads:
-            del grad_tensor_dict[g_key] # delete consumed gradients
-                
-        return grad_tensor_dict
+        for key, value in saved_in.items():
+            if not ( isinstance(key, str) ):
+                new_dict[key] = value.grad # define the gradient to be passed back
+      
+        
+        return new_dict, ret_outs

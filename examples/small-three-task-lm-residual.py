@@ -59,35 +59,35 @@ def collate_batch(batch_data, batch_size, mask_frac, mask_id, cls_id):
     Custom loss function
 """
 
-def pretraining_loss(out, targets):
-    print("OUT: {}".format(out))
-    print("TARGETS: {}".format(targets))
-    lm_mask, label = targets
+def pretraining_loss(out, lm_mask, labels):
     out = torch.stack([out[i] for i in range(lm_mask.size(0)) if lm_mask[i]])
     loss_computer = torch.nn.CrossEntropyLoss()
     out = out.view(-1, 28783)
-    label = label.to(out.device)
-    
-    return loss_computer(out, label)
+    return loss_computer(out, labels)
 
 
 """
     Helper function to create a training dataloader.
 """
-
-def get_data_loader_train(b_size):
+def get_data_loader(b_size, train=True):
     start = timer()
     print("\nPreparing to load dataset....")
 
 
     if (path.exists("vocab/torchtext_bert_vocab_wiki.pt")):
         vocab = torch.load("vocab/torchtext_bert_vocab_wiki.pt")
-        dataset = WikiText2(vocab=vocab, split='train') # set to train for real testing.pi
+        if train:
+            dataset = WikiText2(vocab=vocab, split='train') # set to train for real testing.pi
+        else:
+            dataset = WikiText2(vocab = vocab, split='test') # set to train for real testing.pi
     else:
         dataset = WikiText2(split='train') # set to train for real testing.pi
         vocab = dataset.get_vocab()
         torch.save(vocab, "vocab/torchtext_bert_vocab_wiki.pt")
-        dataset = WikiText2(vocab = vocab, split='train') # set to train for real testing.pi
+        if train:
+            dataset = WikiText2(vocab = vocab, split='train') # set to train for real testing.pi
+        else:
+            dataset = WikiText2(vocab = vocab, split='test') # set to train for real testing.pi
 
 
     dataset.data = torch.cat(tuple(filter(lambda t: t.numel() > 0, dataset)))
@@ -106,11 +106,6 @@ def get_data_loader_train(b_size):
                                 collate_fn=lambda b: collate_batch(b, b_size, mask_frac, mask_id, cls_id), drop_last=True)
 
 
-
-
-"""
-    Main function
-"""
 
 
 def get_model(name):
@@ -163,7 +158,7 @@ def get_model(name):
     }
     
     io_dictionary = {
-        29: [28, "label_0"],
+        29: [28, "label_0", "label_1"],
         28: [27],
         27: [26],
         26: [25],
@@ -196,7 +191,7 @@ def get_model(name):
     }
     
     
-    model_task = ModelTask(name, layer_dictionary, io_dictionary, get_data_loader_train(32), 0.001, 4)
+    model_task = ModelTask(name, layer_dictionary, io_dictionary, get_data_loader(32), 0.001, 1)
     
     output_keys = ["batch_0"] + list(range(0, 30)) # the tensors that have forward receivers. 29's forward receiver is injected
                                                    # by the modelTask
@@ -216,7 +211,7 @@ def get_model(name):
     local_dictionary_2 = {idx: layer_dictionary[idx] for idx in range(20, 30)}
     local_input_dictionary_2 = {idx: io_dictionary[idx] for idx in range(20, 30)}
     #local_output_dictionary_2 = {output_keys[idx]: model_task.layer_to_output_dict[output_keys[idx]] for idx in range(20, 31)}
-    #print(local_output_dictionary_2)
+
     
     
     
@@ -225,7 +220,7 @@ def get_model(name):
     shard_to_input_dict = {
         0: ["batch_0"],
         1: [9],
-        2: [19, "label_0"],
+        2: [19, "label_0", "label_1"],
         3: [9],
         4: ["batch_0"]
     }
@@ -233,7 +228,7 @@ def get_model(name):
     shard_to_output_dict = {
         0: [9],
         1: [19],
-        2: ["END"],
+        2: [29],
         3: [19],
         4: [9]
     }
@@ -263,6 +258,12 @@ def get_model(name):
     model_task.setup(None, shard_dictionary, shard_to_input_dict, shard_to_output_dict, mini_batch_time)
     return model_task
 
+
+"""
+    Main function
+"""
+
+
 def main():
 
 
@@ -272,11 +273,67 @@ def main():
     model_1 = get_model("Model_1")
     model_2 = get_model("Model_2")
     
+    with torch.no_grad():
+        for model in [model_0, model_1, model_2]:
+            total_loss = 0
+            dataloader = get_data_loader(32, train=False)
+            print("Evaluating: {}".format(model.name))
+
+            out = None
+            count = 0
+            total_count = len(dataloader)
+            for batch, label in dataloader:
+                for key in range(0, 30):
+                    if key == 0:
+                        model.layer_dictionary[0] = model.layer_dictionary.to("cuda:0")
+                        batch = batch.to("cuda:0")
+                        out = model.layer_dictionary[0](batch)
+                    elif key == 29:
+                        label_0 = label[0].to("cuda:0")
+                        label_1 = label[1].to("cuda:0")
+                        loss = pretraining_loss(out, label_0, label_1)
+                        total_loss += loss.item()
+                    else:
+                        model.layer_dictionary[key] = model.layer_dictionary.to("cuda:0")
+                        batch = batch.to("cuda:0")
+                        out = model.layer_dictionary[key] (out)
+                count+=1
+            print()
+            print("Average batch loss: {}".format(total_loss / len(dataloader)))
+                
+    
     # create orchestrator
     orchestra = ModelOrchestrator([model_0, model_1, model_2])
     orchestra.verbose = 1
 
     orchestra.train_models()
+                                                  
+    with torch.no_grad():
+        for model in [model_0, model_1, model_2]:
+            total_loss = 0
+            dataloader = get_data_loader(32, train=False)
+            print("Evaluating: {}".format(model.name))
+            count = 0
+            total_count = len(dataloader)
+            out = None
+            for batch, label in dataloader:
+                for key in range(0, 30):
+                    if key == 0:
+                        model.layer_dictionary[0] = model.layer_dictionary[0].to("cuda:0")
+                        batch = batch.to("cuda:0")
+                        out = model.layer_dictionary[0](batch)
+                    elif key == 29:
+                        label_0 = label[0].to("cuda:0")
+                        label_1 = label[1].to("cuda:0")
+                        loss = pretraining_loss(out, label_0, label_1)
+                        total_loss += loss.item()
+                    else:
+                        model.layer_dictionary[key] = model.layer_dictionary[key].to("cuda:0")
+                        batch = batch.to("cuda:0")
+                        out = model.layer_dictionary[key] (out)
+                count+=1
+            print()
+            print("Average batch loss: {}".format(total_loss / len(dataloader)))
     
 if __name__ == "__main__":
     main()

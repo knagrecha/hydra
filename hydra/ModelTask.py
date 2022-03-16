@@ -57,14 +57,12 @@ class ModelTask():
             
         """
         self.layer_dictionary = layer_dictionary
-        self.layer_dictionary["END"] = None # the injected endpoint. Will not be added to shards.
-
         self.layer_to_input_dict = io_dictionary
         
         self.layer_to_output_dict = defaultdict(list)
         
         self.tensor_dictionary = {}
-        self.grad_dictionary = {"END": None}
+        self.grad_dictionary = {}
         
         # endpoint keys (criterions) will essentially not appear in
         # any key's value. They do not output to anyone
@@ -76,9 +74,8 @@ class ModelTask():
                 
     
         endpoint_keys = self.layer_to_input_dict.keys() - self.layer_to_output_dict.keys()
-        self.layer_to_input_dict["END"] = list(endpoint_keys)
         for key in endpoint_keys:
-            self.layer_to_output_dict[key].append("END")
+            self.grad_dictionary[key] = None
 
         """
             The layer_to_inputs can be used to create a coarser shard_to_input dict.
@@ -112,16 +109,9 @@ class ModelTask():
         
         self.global_timer = 0 # used to identify running times
         self.name = name # used in debugging
-        
-        
-        #self.model = model
-        #self.forward_shards = []
-        #self.backward_shards = []
-         
+          
         self.remaining_runtime = 0
-        #self.partitioner = partitioner
-        
-        
+
         self.lr = lr
         self.total_epochs = epochs
         self.epochs = epochs
@@ -169,11 +159,11 @@ class ModelTask():
         self.tensor_dictionary = {}
         self.candidate_shards = set()
         self.completed_shards = set()
-        self.grad_dictionary = {"END": None}
-        
-        # Time between last minibatch completion and this one
-        self.last_runtime = timer()-self.last_mini_time
-        
+        self.grad_dictionary = {}
+        endpoint_keys = self.layer_to_input_dict.keys() - self.layer_to_output_dict.keys()
+        for key in endpoint_keys:
+            self.grad_dictionary[key] = None
+
         
         # Update minibatch, handle new batch as well
         try:
@@ -202,25 +192,18 @@ class ModelTask():
                 self.tensor_dictionary["label_{}".format(idx)] = tensor
         else:
             self.tensor_dictionary["label_0"] = label 
-            
+        
         self.update_task()
             
     """
         Updates the ModelTask. Should be called after each shard completion.
     """
     def update_task(self, completed_index=None, ret_tensor_dictionary=None, ret_grad_dictionary=None):
-        print("----UPDATING MODEL: {}----".format(self.name))
-        print("INITIAL CANDIDATES: {}".format(self.candidate_shards))
         if completed_index is not None:
             self.completed_shards.add(completed_index)
             
         if ret_tensor_dictionary is not None:
-            if "END" in ret_tensor_dictionary:
-                self.last_loss = ret_tensor_dictionary["END"].item()
             self.tensor_dictionary.update(ret_tensor_dictionary)
-            print("INTAKE TENSOR DICTIONARY: {}".format(ret_tensor_dictionary.keys()))
-            print("UPDATED TENSOR DICTIONARY: {}".format(self.tensor_dictionary.keys()))
-                  
             
         if ret_grad_dictionary is not None:
             self.grad_dictionary.update(ret_grad_dictionary)
@@ -232,20 +215,15 @@ class ModelTask():
         for shard in eval_shards:
             if self.shard_dictionary[shard].direction == "f":
                 req_tensors = self.shard_to_input_dict[shard]
-                print("EVALUATING: {}".format(shard))
-                print("REQUESTS: {}".format(req_tensors))
-                print("AVAILABLE: {}".format(self.tensor_dictionary.keys()))
                 if all(req in self.tensor_dictionary for req in req_tensors):
-                    print("VALID: {}".format(shard))
                     self.candidate_shards.add(shard)
             else:
-                greq_tensors = self.shard_to_output_dict[shard]
+                greq_tensors = self.shard_dictionary[shard].model.requested_outputs
                 req_tensors = self.shard_to_input_dict[shard]
                 if all(req in self.tensor_dictionary and greq in self.grad_dictionary for req, greq in zip(req_tensors, greq_tensors)):
                     self.candidate_shards.add(shard)
-            
-        print("UPDATED CANDIDATES: {}".format(self.candidate_shards))
-        if (len(self.completed_shards) == self.total_shards):
+        
+        if (len(self.completed_shards) == len(self.total_shards)):
             self.get_new_batch()
             
         
@@ -270,9 +248,8 @@ class ModelTask():
         tensor_requests = self.shard_to_input_dict[key]
         input_tensors = {k: self.tensor_dictionary[k] for k in tensor_requests}
         if shard_task.direction == "b":
-            grad_requests = self.shard_to_output_dict[key]
+            grad_requests = shard_task.model.requested_outputs
             grad_tensors = {k: self.grad_dictionary[k] for k in grad_requests}
-            print("GRAD TENSORS: {}".format(grad_tensors))
         else:
             grad_tensors = None
 
