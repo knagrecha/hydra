@@ -23,7 +23,9 @@ import torch
 from torchtext.experimental.datasets import WikiText2
 from torch.utils.data import DataLoader
 from os import path
-from timeit import timeit as timer
+from timeit import default_timer as timer
+
+
 
 """
     Preprocessing functions for the dataloaders.
@@ -271,19 +273,69 @@ def main():
 
     model_0 = get_model("Model_0")
     model_1 = get_model("Model_1")
-    model_2 = get_model("Model_2")
+    #model_2 = get_model("Model_2")
+    """
+    print("RUNTIME COMPARISON")
+    for model in [model_0, model_1]:
+        total_loss = 0
+        dataloader = get_data_loader(32)
+        print("Evaluating: {}".format(model.name))
+        count = 0
+        total_count = len(dataloader)
+        out = None
+        params = set()
+        for key, value in model.shard_dictionary.items():
+            params.update( set(value.model.parameters() ) )
+            
+            
+        optimizer = torch.optim.SGD(params, lr=0.001)
+        
+        st = timer()
+        for batch, label in dataloader:
+            if (count % 10 == 0):
+                print(" {} / {}".format(count, total_count))
+            for key in range(0, 30):
+                if key == 0:
+                    model.layer_dictionary[0] = model.layer_dictionary[0].to("cuda:0")
+                    batch = batch.to("cuda:0")
+                    out = model.layer_dictionary[0](batch)
+                elif key == 29:
+                    label_0 = label[0].to("cuda:1")
+                    label_1 = label[1].to("cuda:1")
+                    loss = pretraining_loss(out, label_0, label_1)
+                    loss.backward()
+                    optimizer.step()
+                    for key, shard in model.shard_dictionary.items():
+                        shard.model.zero_grad()
+                    total_loss += loss.item()
+                else:
+                    if (key > 15):
+                        model.layer_dictionary[key] = model.layer_dictionary[key].to("cuda:1")
+                        out = out.to("cuda:1")
+                        out = model.layer_dictionary[key] (out)
+                    else:
+                        model.layer_dictionary[key] = model.layer_dictionary[key].to("cuda:0")
+                        out = out.to("cuda:0")
+                        out = model.layer_dictionary[key] (out)
+            count+=1
+        print("TIME TAKEN: {}".format(timer() - st))
+        print("Average batch loss: {}".format(total_loss / len(dataloader)))
+    
     
     with torch.no_grad():
-        for model in [model_0, model_1, model_2]:
+        for model in [model_0, model_1]:
             total_loss = 0
             dataloader = get_data_loader(32, train=False)
             print("Evaluating: {}".format(model.name))
-            
             out = None
             count = 0
             total_count = len(dataloader)
             for batch, label in dataloader:
-                print(" {} / {}".format(count, total_count), end='\r', flush=True)
+                if (count == 20):
+                    st = timer()
+
+                if (count % 10 == 0):
+                    print(" {} / {}".format(count, total_count))
                 for key in range(0, 30):
                     if key == 0:
                         model.layer_dictionary[0] = model.layer_dictionary[0].to("cuda:0")
@@ -298,19 +350,29 @@ def main():
                         model.layer_dictionary[key] = model.layer_dictionary[key].to("cuda:0")
                         batch = batch.to("cuda:0")
                         out = model.layer_dictionary[key] (out)
+                        
+                if (count == 20):
+
+                    end = timer()
+                    print("MiniBatch Time: {}".format(end - st))
+                    
                 count+=1
+                
             print()
             print("Average batch loss: {}".format(total_loss / len(dataloader)))
-                
+    
+    """           
     
     # create orchestrator
-    orchestra = ModelOrchestrator([model_0, model_1, model_2])
+    orchestra = ModelOrchestrator([model_0, model_1])
     orchestra.verbose = 1
 
+    st = timer()
     orchestra.train_models()
-                                                  
+    print("TIME TAKEN: {}".format(timer() - st))
+    """                                             
     with torch.no_grad():
-        for model in [model_0, model_1, model_2]:
+        for model in [model_0, model_1]:
             total_loss = 0
             dataloader = get_data_loader(32, train=False)
             print("Evaluating: {}".format(model.name))
@@ -318,7 +380,8 @@ def main():
             total_count = len(dataloader)
             out = None
             for batch, label in dataloader:
-                print(" {} / {}".format(count, total_count), end='\r', flush=True)
+                if (count % 10 == 0):
+                    print(" {} / {}".format(count, total_count))
                 for key in range(0, 30):
                     if key == 0:
                         model.layer_dictionary[0] = model.layer_dictionary[0].to("cuda:0")
@@ -336,6 +399,9 @@ def main():
                 count+=1
             print()
             print("Average batch loss: {}".format(total_loss / len(dataloader)))
+            
+    """
     
+
 if __name__ == "__main__":
     main()

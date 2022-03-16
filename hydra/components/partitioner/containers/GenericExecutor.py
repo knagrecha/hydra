@@ -58,11 +58,6 @@ class GenericExecutor(nn.Module):
             if (len(candidate_layers) == 0): # if all recipients in this shard were exhausted
                 successful_pass = True
 
-        # clear out unneeded inputs
-        remove_keys = tensor_dictionary.keys() - self.requested_outputs
-        for key in remove_keys:
-            tensor_dictionary.pop(key, None)
-
         return tensor_dictionary
         
     def forward(self, tensor_dictionary, no_grad=True):
@@ -98,12 +93,10 @@ class GenericExecutor(nn.Module):
         ret_outs = [output_dict[idx] for idx in self.requested_outputs]   
         
         torch.autograd.backward(ret_outs, ret_grads) # backprop
-        
-        new_dict = {}
+
         # record gradients if available
         for key, value in saved_in.items():
             if not ( isinstance(key, str) ):
-                new_dict[key] = value.grad # define the gradient to be passed back
-      
-        
-        return new_dict
+                grad_tensor_dict[key] = value.grad # define the gradient to be passed back
+
+        return grad_tensor_dict

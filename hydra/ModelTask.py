@@ -19,6 +19,7 @@ from hydra.utilities import get_free_space
 import numpy as np
 from torch import multiprocessing as multiprocessing
 from collections import defaultdict
+import copy
 
 class ModelTask():
     #def __init__(self, name, model, criterion, dataloader, lr, epochs, global_timer=None, use_scaler=False, partitioner=Pilot()):
@@ -102,7 +103,7 @@ class ModelTask():
             we update resolved dependencies.
         """
         self.candidate_shards = set()
-        
+        self.blocked_shards = set()
         self.completed_shards = set() # how many shards have been run
         
         
@@ -160,6 +161,7 @@ class ModelTask():
         self.candidate_shards = set()
         self.completed_shards = set()
         self.grad_dictionary = {}
+        self.blocked_shards = set()
         endpoint_keys = self.layer_to_input_dict.keys() - self.layer_to_output_dict.keys()
         for key in endpoint_keys:
             self.grad_dictionary[key] = None
@@ -210,7 +212,7 @@ class ModelTask():
             self.grad_dictionary.update(ret_grad_dictionary)
         
         # get shards that are not already executed or primed
-        eval_shards = (self.total_shards - self.completed_shards) - self.candidate_shards
+        eval_shards = (self.total_shards - self.completed_shards) - self.candidate_shards  - self.blocked_shards
         
         # check if their dependencies have been resolved
         for shard in eval_shards:
@@ -227,11 +229,56 @@ class ModelTask():
         if (len(self.completed_shards) == len(self.total_shards)):
             self.get_new_batch()
             
+            
+    """
+        "Planned" candidates after shard key completes. Doesn't affect any class variables.
+    """
+    def get_expected_update(self, key):
+
+        gen_shard = self.shard_dictionary[key]
         
-        
-        
+        if gen_shard.direction == "f":
+            expected_outs = self.shard_to_output_dict[key]
+            expected_total = set(self.tensor_dictionary.keys()) | set(expected_outs) 
+            eval_shards = (self.total_shards - self.completed_shards) - self.candidate_shards - self.blocked_shards
+        else:
+            expected_outs = self.shard_to_input_dict[key]
+            expected_total = set(self.grad_dictionary.keys()) | set(expected_outs) 
+            eval_shards = (self.total_shards - self.completed_shards) - self.candidate_shards  - self.blocked_shards
+            
+            
+        possibles = copy.copy(self.candidate_shards)
+        for shard in eval_shards:
+            if self.shard_dictionary[shard].direction == "f":
+                req_tensors = self.shard_to_input_dict[shard]
+                if all(req in expected_total for req in req_tensors):
+                    possibles.add(shard)
+            else:
+                greq_tensors = self.shard_dictionary[shard].model.requested_outputs
+                req_tensors = self.shard_to_input_dict[shard]
+                if all(req in self.tensor_dictionary and greq in expected_total for req, greq in zip(req_tensors, greq_tensors)):
+                    possibles.add(shard)
+        return possibles
+
+    """
+        Will be called for buffering. Blacklists this shard from being selected in future scheduling until minibatch
+        finishes.
+    """
+    
     def get_shard(self, key):
-        self.candidate_shards.remove(key)
+        print("GET MODEL {} SHARD: {}".format(self.name, key))
+        self.blocked_shards.add(key)
+        self.candidate_shards.discard(key)
+        shard_task = self.shard_dictionary[key]
+        return shard_task
+    
+    def get_shard_blind(self):
+        key = self.candidate_shards.pop()
+        self.blocked_shards.add(key)
+        shard_task = self.shard_dictionary[key]
+        return key, shard_task
+
+    def get_shard_inputs(self, key):
         shard_task = self.shard_dictionary[key]
         tensor_requests = self.shard_to_input_dict[key]
         input_tensors = {k: self.tensor_dictionary[k] for k in tensor_requests}
@@ -240,18 +287,4 @@ class ModelTask():
             grad_tensors = {k: self.grad_dictionary[k] for k in tensor_requests}
         else:
             grad_tensors = None
-            
-        return shard_task, input_tensors, grad_tensors
-    
-    def get_shard_blind(self):
-        key = self.candidate_shards.pop()
-        shard_task = self.shard_dictionary[key]
-        tensor_requests = self.shard_to_input_dict[key]
-        input_tensors = {k: self.tensor_dictionary[k] for k in tensor_requests}
-        if shard_task.direction == "b":
-            grad_requests = shard_task.model.requested_outputs
-            grad_tensors = {k: self.grad_dictionary[k] for k in grad_requests}
-        else:
-            grad_tensors = None
-
-        return key, shard_task, input_tensors, grad_tensors
+        return input_tensors, grad_tensors

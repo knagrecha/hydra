@@ -54,6 +54,7 @@ class ShardTask():
             
             vals = self.model.backward(tensor_dictionary, gradient_tensor_dictionary)
             self.optimizer.step()
+            self.model.zero_grad()
             
         self.model.to("cpu", non_blocking=True)
         return vals
