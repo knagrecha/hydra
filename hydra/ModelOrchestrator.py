@@ -74,35 +74,34 @@ class ModelOrchestrator():
 
     def train_shard_on_device(self, model_shard, model_task, input_tensors, grad_tensors, chosen_device, chosen_shard_index):
         try:
-            profile_timer_start = timer()
-
-            
             returned_tensors = model_shard.run(chosen_device, input_tensors, grad_tensors) # run the model
         
             # if any of the tensors are requested by a cached shard, then do not move them (mark_saved), otherwise
             # send to CPU
-            st = timer()
             ret_keys = returned_tensors.keys()
-            mark_saved = {}
+            mark_saved = set()
             if returned_tensors:
                 do_save = False
-                for cached_task, cached_shard in self.cached_tasks.items():
+                
+                """
+                    TODO: If we run into bugs, maybe restrict this evaluation to self.cached_tasks[chosen_device]
+                
+                """
+                
+                for device, (cached_task, cached_shard, shard_key) in self.cached_tasks.items():
                     if cached_task == model_task:
-                        if cached_task.shard_dictionary[cached_shard].model != model_shard.model:
-                            self.model.to("cpu", non_blocking=True)
+                        if cached_task.shard_dictionary[shard_key].model != model_shard.model:
+                            model_shard.model.to("cpu", non_blocking=True)
+                        savables = cached_task.shard_to_input_dict[shard_key]
                         for key in ret_keys:
-                            if key in cached_task.shard_to_input_dict[cached_shard]:
+                            if key in savables:
                                 mark_saved.add(key)
-                
-                
-                
+
                 for key in ret_keys:
                     if key not in mark_saved:
                         if returned_tensors[key] is not None:
                             returned_tensors[key] = returned_tensors[key].to("cpu", non_blocking=True)
-                end = timer()
-                print("OFFLOAD TIME: {}".format(end-st))
-            
+
             if model_shard.direction == "f":
                 model_task.update_task(chosen_shard_index, ret_tensor_dictionary=returned_tensors)
             else:
@@ -116,7 +115,6 @@ class ModelOrchestrator():
             self.unlock_device(chosen_device)
             self.active_tasks[chosen_device] = (None, None)
 
-            profile_timer_end = timer()
             self.sleep_event.set()
             
         except Exception as e:
@@ -198,7 +196,6 @@ class ModelOrchestrator():
                     # trigger buffered tasks if available
                     cache_task, chosen_shard, chosen_key = self.cached_tasks[device]
                     if cache_task is not None:
-                    
                         in_tensors, grad_tensors = cache_task.get_shard_inputs(chosen_key)
                         if cache_task is not None:
                             self.idle_tasks.remove(cache_task)
@@ -212,6 +209,7 @@ class ModelOrchestrator():
                     else:
                         candidate_tasks = [t for t in self.tasks if len(t.candidate_shards) > 0] # selection candidates
                         if (len(candidate_tasks) > 0):
+                            
                             task_times = [(i.mini_batch_time * i.minibatches_remaining) + (i.mini_batch_time * i.total_length * i.epochs) for i in candidate_tasks]
                             chosen_task = candidate_tasks[np.argmax(task_times)]
                             self.lock_device(device)
@@ -238,8 +236,6 @@ class ModelOrchestrator():
                                 
                     lrt = -1 # Sharded-LRTF selection - start by calculating LRT
                     cache_task = None
-                    
-                    
                     for candidate in candidate_tasks:
                         task_time = ((candidate.mini_batch_time * candidate.minibatches_remaining) + 
                                          (candidate.mini_batch_time * candidate.total_length * candidate.epochs))
@@ -248,7 +244,6 @@ class ModelOrchestrator():
                             cache_task = candidate
 
                     if cache_task is not None:
-                        
                         # if caching from same model
                         if cache_task == self.active_tasks[device][0]:
                             chosen_key = active_task_specific_shard_pool.pop()

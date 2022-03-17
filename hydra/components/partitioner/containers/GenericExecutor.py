@@ -16,6 +16,26 @@ import copy
 import gc
 import torch
 from timeit import default_timer as timer
+# Used to "freeze" execution order from dict dependencies. Frontloading this cost reduces execution time substantially.
+def topological_sort(graph, init_vals):
+    result = []
+    seen = init_vals
+
+    def recursive_helper(node):
+        for neighbor in graph.get(node, []):
+            if neighbor not in seen:
+                seen.add(neighbor)
+                recursive_helper(neighbor)
+                
+        if node not in result:
+            result.append(node)
+            
+    for key in graph.keys():
+        recursive_helper(key)
+        
+    return result
+
+
 """
     Dictionary-defined executor. Enables Hydra to train 
     arbitrary computational DAGs.
@@ -34,30 +54,30 @@ class GenericExecutor(nn.Module):
         self.layer_dictionary = layer_dictionary
         self.all_layers = self.layer_dictionary.keys()
         self.requested_outputs = set(requested_outputs) # maps input layers to the layers that receive it
-        self.input_dictionary = input_dictionary
         
+        
+        self.input_dictionary = input_dictionary
+        # identify entry points
+        entry_points = set()
+        for key, value in input_dictionary.items():
+            for val in value:
+                if val not in self.input_dictionary:
+                    entry_points.add(val)
+                    
+        self.execution_order = topological_sort(input_dictionary, entry_points)
+
         for key, value in self.layer_dictionary.items():
             if (isinstance(value, nn.Module)):
                 self.add_module("Module_{}".format(key), value)
 
     """
-        Forward pass will continue to run until no internal layer-input match can be found.
-        Tensor dictionary matches previous layer indices to their outputs.
-        This is basically a 'BFS' through the model.
+        Forward pass will make use of the topological ordering.
     """
     def forward_helper(self, tensor_dictionary):
-        successful_pass = False
-        while not successful_pass:
-            # for every received provider, tensor
-            update_dictionary = {}
-            candidate_layers = {layer for layer in self.all_layers if all(req in tensor_dictionary for req in self.input_dictionary[layer]) } - tensor_dictionary.keys()
-            for layer in candidate_layers:
-                requested_inputs = [ tensor_dictionary[req] for req in self.input_dictionary[layer] ]
-                tensor_dictionary[layer] = self.layer_dictionary[layer](*requested_inputs) # plug in all requested inputs
-
-            if (len(candidate_layers) == 0): # if all recipients in this shard were exhausted
-                successful_pass = True
-
+        for layer in self.execution_order:
+            reqs = self.input_dictionary[layer]
+            requested_inputs = [ tensor_dictionary[req] for req in reqs ]
+            tensor_dictionary[layer] = self.layer_dictionary[layer](*requested_inputs) # plug in all requested inputs
         return tensor_dictionary
         
     def forward(self, tensor_dictionary, no_grad=True):
@@ -73,9 +93,6 @@ class GenericExecutor(nn.Module):
         and updating gradient pass backs.
     """  
     
-    
-    
-    
     def backward(self, in_tensor_dict, grad_tensor_dict): 
         saved_in = copy.copy(in_tensor_dict)
         successful_pass = False
@@ -85,18 +102,12 @@ class GenericExecutor(nn.Module):
                 value.requires_grad_(True)
         
         # run forward, grad enabled
-        st = timer()
         output_dict = self.forward(in_tensor_dict, no_grad=False)
-        end = timer()
-        print("CHECKPOINT TIME: {}".format(end-st))
         
         # get the gradients and outputs
         ret_grads = [grad_tensor_dict[idx] for idx in self.requested_outputs]
         ret_outs = [output_dict[idx] for idx in self.requested_outputs]   
-        st = timer()
         torch.autograd.backward(ret_outs, ret_grads) # backprop
-        end = timer()
-        print("CHECKPOINT TIME: {}".format(end-st))
         
         # record gradients if available
         for key, value in saved_in.items():

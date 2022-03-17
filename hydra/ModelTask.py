@@ -181,7 +181,7 @@ class ModelTask():
         self.minibatches_remaining -= 1 # decrement minibatch count
         
         completed_mbs = self.total_length - self.minibatches_remaining
-        if (completed_mbs % 1 == 0):
+        if (completed_mbs % 25 == 0):
             print("MODEL: {}, EPOCH: {}, MBS: {} / {}".format(self.name, self.total_epochs-self.epochs, completed_mbs, self.total_length))
         
         

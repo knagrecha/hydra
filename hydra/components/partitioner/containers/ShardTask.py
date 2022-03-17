@@ -13,7 +13,6 @@
 
 
 import torch
-from timeit import default_timer as timer
 """
     The "shard-stage" wrapper. Essentially refers to a particular shard's part of the minibatch 
     (known as a microbatch in prior art). 
@@ -34,35 +33,25 @@ class ShardTask():
     def __init__(self, model, direction, lr):
         self.lr = lr
         self.model = model
+        for param in model.parameters():
+            param.pin_memory()
         self.direction = direction
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr = self.lr)
 
     def run(self, device, tensor_dictionary, gradient_tensor_dictionary=None):
-        
-        st = timer()
         self.model.to(device, non_blocking=True)
         for key, value in tensor_dictionary.items():
             tensor_dictionary[key] = value.to(device, non_blocking=True)
         
         if self.direction == "f":
-            end = timer()
-            print("F_PROMOTE TIME: {}".format(end-st))
-            st = timer()
             vals = self.model.forward(tensor_dictionary)
-            end = timer()
-            print("F_EXEC TIME: {}".format(end-st))
         else:
             b_keys = gradient_tensor_dictionary.keys()
             for key in b_keys:
                 if gradient_tensor_dictionary[key] is not None:
                     gradient_tensor_dictionary[key] = gradient_tensor_dictionary[key].to(device, non_blocking=True)
-            
-            end = timer()
-            print("B_PROMOTE TIME: {}".format(end-st))
-            st = timer()
+
             vals = self.model.backward(tensor_dictionary, gradient_tensor_dictionary)
             self.optimizer.step()
             self.model.zero_grad()
-            end = timer()
-            print("B_EXEC TIME: {}".format(end-st))
         return vals

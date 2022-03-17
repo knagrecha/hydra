@@ -65,7 +65,8 @@ def pretraining_loss(out, lm_mask, labels):
     out = torch.stack([out[i] for i in range(lm_mask.size(0)) if lm_mask[i]])
     loss_computer = torch.nn.CrossEntropyLoss()
     out = out.view(-1, 28783)
-    return loss_computer(out, labels)
+    x = loss_computer(out, labels)
+    return x
 
 
 """
@@ -105,7 +106,7 @@ def get_data_loader(b_size, train=True):
 
 
     return DataLoader(dataset, batch_size=b_size * bptt, shuffle=True,
-                                collate_fn=lambda b: collate_batch(b, b_size, mask_frac, mask_id, cls_id), drop_last=True)
+                                collate_fn=lambda b: collate_batch(b, b_size, mask_frac, mask_id, cls_id), drop_last=True, pin_memory=True)
 
 
 
@@ -252,11 +253,9 @@ def main():
     device_count = torch.cuda.device_count()
 
     model_0 = get_model("Model_0")
-    model_1 = get_model("Model_1")
-    model_2 = get_model("Model_2")
     """
     print("RUNTIME COMPARISON")
-    for model in [model_0, model_1]:
+    for model in [model_0]:
         total_loss = 0
         dataloader = get_data_loader(32)
         print("Evaluating: {}".format(model.name))
@@ -270,57 +269,43 @@ def main():
             
         optimizer = torch.optim.SGD(params, lr=0.001)
         
-        st = timer()
-        f_times_sum = 0
-        b_times_sum = 0
+        full_st = timer()
         for batch, label in dataloader:
-            
             if (count % 1 == 0):
                 print(" {} / {}".format(count, total_count))
-                print("FTIMES: {}".format(f_times_sum))
-                print("BTIMES: {}".format(b_times_sum))
                 f_times_sum = 0
                 b_times_sum = 0
             for key in range(0, 30):
                 if key == 0:
                     model.layer_dictionary[0] = model.layer_dictionary[0].to("cuda:0")
                     batch = batch.to("cuda:0")
-                    st = timer()
                     out = model.layer_dictionary[0](batch)
-                    end = timer()
-                    f_times_sum += end - st
                 elif key == 29:
                     label_0 = label[0].to("cuda:1")
                     label_1 = label[1].to("cuda:1")
-                    st = timer()
                     loss = pretraining_loss(out, label_0, label_1)
+                    st = timer()
                     loss.backward()
                     optimizer.step()
                     for key, shard in model.shard_dictionary.items():
                         shard.model.zero_grad()
                     total_loss += loss.item()
                     end = timer()
-                    b_times_sum += end - st
                 else:
                     if (key > 15):
                         model.layer_dictionary[key] = model.layer_dictionary[key].to("cuda:1")
                         out = out.to("cuda:1")
-                        st = timer()
                         out = model.layer_dictionary[key] (out)
-                        end = timer()
-                        f_times_sum += end - st
                     else:
                         model.layer_dictionary[key] = model.layer_dictionary[key].to("cuda:0")
                         out = out.to("cuda:0")
-                        st = timer()
                         out = model.layer_dictionary[key] (out)
-                        end = timer()
-                        f_times_sum += end - st
             count+=1
-        print("TIME TAKEN: {}".format(timer() - st))
+        print("TIME TAKEN: {}".format(timer() - full_st))
         print("Average batch loss: {}".format(total_loss / len(dataloader)))
     
-    
+    """
+    """
     with torch.no_grad():
         for model in [model_0, model_1]:
             total_loss = 0
