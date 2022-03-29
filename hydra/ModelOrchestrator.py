@@ -75,9 +75,11 @@ class ModelOrchestrator():
     def train_shard_on_device(self, model_shard, model_task, input_tensors, grad_tensors, chosen_device, chosen_shard_index):
         try:
             returned_tensors = model_shard.run(chosen_device, input_tensors, grad_tensors) # run the model
-        
+            #end = timer()
             # if any of the tensors are requested by a cached shard, then do not move them (mark_saved), otherwise
             # send to CPU
+            
+            #st = timer()
             ret_keys = returned_tensors.keys()
             mark_saved = set()
             if returned_tensors:
@@ -101,6 +103,9 @@ class ModelOrchestrator():
                     if key not in mark_saved:
                         if returned_tensors[key] is not None:
                             returned_tensors[key] = returned_tensors[key].to("cpu", non_blocking=True)
+                            
+            #end = timer()
+            #print("TIME TAKEN FOR DEMOTE: {}".format(end-st))
 
             if model_shard.direction == "f":
                 model_task.update_task(chosen_shard_index, ret_tensor_dictionary=returned_tensors)
@@ -250,8 +255,17 @@ class ModelOrchestrator():
                             chosen_shard = cache_task.get_shard(chosen_key)
                         else:
                             chosen_key, chosen_shard = cache_task.get_shard_blind() # get the first candidate 
+                            
                         self.cached_tasks[device] = (cache_task, chosen_shard, chosen_key)
                         chosen_shard.model = chosen_shard.model.to(device, non_blocking=True) # Buffer up the model
+                        
+                        available_in_tensors, available_grad_tensors = cache_task.get_available_shard_inputs(chosen_key)
+                        for t in available_in_tensors:
+                            cache_task.tensor_dictionary[t] = cache_task.tensor_dictionary[t].to(device, non_blocking=True)
+                        for t in available_grad_tensors:
+                            if cache_task.grad_dictionary[t] is not None:
+                                cache_task.grad_dictionary[t] = cache_task.grad_dictionary[t].to(device, non_blocking=True)
+                        
      
 
             except KeyboardInterrupt:

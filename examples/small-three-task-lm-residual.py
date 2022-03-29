@@ -24,7 +24,7 @@ from torchtext.experimental.datasets import WikiText2
 from torch.utils.data import DataLoader
 from os import path
 from timeit import default_timer as timer
-
+import numpy as np
 
 
 """
@@ -111,132 +111,101 @@ def get_data_loader(b_size, train=True):
 
 
 
-def get_model(name):
-    layer_dictionary = {
-
-        0: custom.BertEmbedding(28783, 1024, transpose=False),
-        
-        1: custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
-        2: custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
-        3: custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
-        4: custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
-        # 4
-        
-        5: custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
-        6: custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
-        7: custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
-        8: custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
-        # 8
-        
-        9: custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
-        10: custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
-        11: custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
-        12: custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
-        # 12
-        
-        13: custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
-        14: custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
-        15: custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
-        16: custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
-        # 16
-        
-        17: custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
-        18: custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
-        19: custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
-        20: custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
-        # 20
-        
-        21: custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
-        22: custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
-        23: custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
-        24: custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
-        # 24 - BERT-Large Size (340M params)
-        
-
-        25: torch.nn.Linear(1024, 1024),
-        26: torch.nn.GELU(),
-        27: torch.nn.LayerNorm(1024, eps=1e-12),
-        28: torch.nn.Linear(1024, 28783),
-        29: pretraining_loss
-    }
+def get_model(name, layer_count):
+    layer_dictionary = {}
+    layer_dictionary[0] = custom.BertEmbedding(28783, 1024, transpose=False)
+    for i in range(1, layer_count+1):
+        layer_dictionary[i] = custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5)
     
-    io_dictionary = {
-        29: [28, "label_0", "label_1"],
-        28: [27],
-        27: [26],
-        26: [25],
-        25: [24],
-        24: [23],
-        23: [22],
-        22: [21],
-        21: [20],
-        20: [19],
-        19: [18],
-        18: [17],
-        17: [16],
-        16: [15],
-        15: [14],
-        14: [13],
-        13: [12],
-        12: [11],
-        11: [10],
-        10: [9],
-        9: [8],
-        8: [7],
-        7: [6],
-        6: [5],
-        5: [4],
-        4: [3],
-        3: [2],
-        2: [1],
-        1: [0],
-        0: ["batch_0"]
-    }
+    layer_dictionary[layer_count+1] = torch.nn.Linear(1024, 1024)
+    layer_dictionary[layer_count+2] = torch.nn.GELU()
+    layer_dictionary[layer_count+3] = torch.nn.LayerNorm(1024, eps=1e-12)
+    layer_dictionary[layer_count+4] = torch.nn.Linear(1024, 28783)
+    layer_dictionary[layer_count+5] = pretraining_loss
+
+    io_dictionary = {}
+    for i in range(len(layer_dictionary)):
+        if i == 0:
+            io_dictionary[i] = ["batch_0"]
+        else:
+            io_dictionary[i] = [i-1]
+    io_dictionary[len(layer_dictionary) - 1].append("label_0")
+    io_dictionary[len(layer_dictionary) - 1].append("label_1")
     
     
     model_task = ModelTask(name, layer_dictionary, io_dictionary, get_data_loader(32), 0.001, 1)
+  
+    curr_layer = 0
+    excess = False
     
-    output_keys = ["batch_0"] + list(range(0, 30)) # the tensors that have forward receivers. 29's forward receiver is injected
-                                                   # by the modelTask
-    
-    local_dictionary_0 = {idx: layer_dictionary[idx] for idx in range(0, 16)}
-    local_input_dictionary_0 = {idx: io_dictionary[idx] for idx in range(0, 16)}
-    #local_output_dictionary_0 = {output_keys[idx]: model_task.layer_to_output_dict[output_keys[idx]] for idx in range(0, 10)}
-    #print(local_input_dictionary_0)
-
-
-    local_dictionary_1 = {idx: layer_dictionary[idx] for idx in range(16, 30)}
-    local_input_dictionary_1 = {idx: io_dictionary[idx] for idx in range(16, 30)}
-    #local_output_dictionary_1 = {output_keys[idx]: model_task.layer_to_output_dict[output_keys[idx]] for idx in range(10, 20)}
-    #print(local_output_dictionary_1)
-    
-
-    shard_to_input_dict = {
-        0: ["batch_0"],
-        1: [15, "label_0", "label_1"],
-        2: ["batch_0"]
-    }
-    
-    shard_to_output_dict = {
-        0: [15],
-        1: [29],
-        2: [15]
-    }
-    
-    gen_0 = containers.GenericExecutor(local_dictionary_0, local_input_dictionary_0, shard_to_output_dict[0])
-    sh_0_f = containers.ShardTask(gen_0, "f", 0.001)
-    sh_0_b = containers.ShardTask(gen_0, "b", 0.001)
-    
-    gen_1 = containers.GenericExecutor(local_dictionary_1, local_input_dictionary_1, shard_to_output_dict[1])
-    sh_1_b = containers.ShardTask(gen_1, "b", 0.001)
+    f_shard_input = []
+    b_shard_input = []
+    f_shard_output = []
+    b_shard_output = []
+    f_shards = []
+    b_shards = []
+    while not excess:
+        local_dictionary = {}
+        local_input = {}
+        for i in range(16):
+            if i == 0:
+                f_shard_input.append(io_dictionary[curr_layer])
+                b_shard_input.append(io_dictionary[curr_layer])
+            local_dictionary[curr_layer] = layer_dictionary[curr_layer]
+            local_input[curr_layer] = io_dictionary[curr_layer]
+            
+            
+            curr_layer+=1
+            if curr_layer == len(layer_dictionary):
+                excess = True
+                f_shard_input.pop(-1)
+                b_shard_input[-1] = b_shard_input[-1] + ["label_0", "label_1"]
+                break
         
-    mini_batch_time = 2.5
+        if not excess:
+            f_shard_output.append([curr_layer-1])
+        b_shard_output.append([curr_layer-1])
+
+        gen = containers.GenericExecutor(local_dictionary, local_input, b_shard_output[-1])
+        
+        if not excess:
+            f_shards.append(containers.ShardTask(gen, "f", 0.001))
+        
+        b_shards.append(containers.ShardTask(gen, "b", 0.001))
     
-    shard_dictionary = {
-        0: sh_0_f,
-        1: sh_1_b,
-        2: sh_0_b
-    }
+    
+    shard_to_input_dict = {}
+    shard_to_output_dict = {}
+    shard_dictionary = {}
+    
+    b_shard_input.reverse()
+    b_shard_output.reverse()
+    b_shards.reverse()
+    all_input = f_shard_input + b_shard_input
+    all_output = f_shard_output + b_shard_output
+    all_shards = f_shards + b_shards
+
+    for i in range(len(all_shards)):
+        shard_to_input_dict[i] = all_input[i]
+        shard_to_output_dict[i] = all_output[i]
+        shard_dictionary[i] = all_shards[i]
+
+    mini_batch_time = 2.5
+
+    print("IO DICTIONARY")
+    print(io_dictionary)
+    
+    print("LAYER DICTIONARY")
+    print(layer_dictionary)
+    
+    print("SHARD DICTIONARY")
+    print(shard_dictionary)
+    
+    print("INPUT")
+    print(shard_to_input_dict)
+    
+    print("OUTPUT")
+    print(shard_to_output_dict)
     
     model_task.setup(None, shard_dictionary, shard_to_input_dict, shard_to_output_dict, mini_batch_time)
     return model_task
@@ -252,7 +221,8 @@ def main():
 
     device_count = torch.cuda.device_count()
 
-    model_0 = get_model("Model_0")
+    model_0 = get_model("Model_0", 24)
+    
     """
     print("RUNTIME COMPARISON")
     for model in [model_0]:
@@ -275,14 +245,14 @@ def main():
                 print(" {} / {}".format(count, total_count))
                 f_times_sum = 0
                 b_times_sum = 0
-            for key in range(0, 30):
+            for key in range(0, len(model.layer_dictionary)):
                 if key == 0:
                     model.layer_dictionary[0] = model.layer_dictionary[0].to("cuda:0")
                     batch = batch.to("cuda:0")
                     out = model.layer_dictionary[0](batch)
-                elif key == 29:
-                    label_0 = label[0].to("cuda:1")
-                    label_1 = label[1].to("cuda:1")
+                elif key == len(model.layer_dictionary) - 1:
+                    label_0 = label[0].to("cuda:0")
+                    label_1 = label[1].to("cuda:0")
                     loss = pretraining_loss(out, label_0, label_1)
                     st = timer()
                     loss.backward()
@@ -292,14 +262,9 @@ def main():
                     total_loss += loss.item()
                     end = timer()
                 else:
-                    if (key > 15):
-                        model.layer_dictionary[key] = model.layer_dictionary[key].to("cuda:1")
-                        out = out.to("cuda:1")
-                        out = model.layer_dictionary[key] (out)
-                    else:
-                        model.layer_dictionary[key] = model.layer_dictionary[key].to("cuda:0")
-                        out = out.to("cuda:0")
-                        out = model.layer_dictionary[key] (out)
+                    model.layer_dictionary[key] = model.layer_dictionary[key].to("cuda:0")
+                    out = out.to("cuda:0")
+                    out = model.layer_dictionary[key] (out)
             count+=1
         print("TIME TAKEN: {}".format(timer() - full_st))
         print("Average batch loss: {}".format(total_loss / len(dataloader)))

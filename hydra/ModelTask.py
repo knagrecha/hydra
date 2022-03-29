@@ -181,7 +181,7 @@ class ModelTask():
         self.minibatches_remaining -= 1 # decrement minibatch count
         
         completed_mbs = self.total_length - self.minibatches_remaining
-        if (completed_mbs % 25 == 0):
+        if (completed_mbs % 1 == 0):
             print("MODEL: {}, EPOCH: {}, MBS: {} / {}".format(self.name, self.total_epochs-self.epochs, completed_mbs, self.total_length))
         
         
@@ -277,6 +277,18 @@ class ModelTask():
         self.blocked_shards.add(key)
         shard_task = self.shard_dictionary[key]
         return key, shard_task
+    
+    def get_available_shard_inputs(self, key):
+        shard_task = self.shard_dictionary[key]
+        tensor_requests = self.shard_to_input_dict[key]
+        input_tensors = [k for k in tensor_requests if k in self.tensor_dictionary]
+        if shard_task.direction == "b":
+            grad_requests = self.shard_to_output_dict[key]
+            grad_tensors = [k for k in grad_requests if k in self.grad_dictionary]
+        else:
+            grad_tensors = None
+        return input_tensors, grad_tensors
+    
 
     def get_shard_inputs(self, key):
         shard_task = self.shard_dictionary[key]
