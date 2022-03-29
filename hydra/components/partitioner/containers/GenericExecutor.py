@@ -89,8 +89,7 @@ class GenericExecutor(nn.Module):
             
             
     """
-        The actual backward pass DFS's to find leaf tensors before calling autograd 
-        and updating gradient pass backs.
+        Backward recalls forward and then backprops.
     """  
     
     def backward(self, in_tensor_dict, grad_tensor_dict): 

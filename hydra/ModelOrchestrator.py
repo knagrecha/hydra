@@ -74,12 +74,14 @@ class ModelOrchestrator():
 
     def train_shard_on_device(self, model_shard, model_task, input_tensors, grad_tensors, chosen_device, chosen_shard_index):
         try:
+            print("EXEC ST {} at {}".format(chosen_shard_index, timer()))
             returned_tensors = model_shard.run(chosen_device, input_tensors, grad_tensors) # run the model
+            print("EXEC END {} at {}".format(chosen_shard_index, timer()))
             #end = timer()
             # if any of the tensors are requested by a cached shard, then do not move them (mark_saved), otherwise
             # send to CPU
             
-            #st = timer()
+            
             ret_keys = returned_tensors.keys()
             mark_saved = set()
             if returned_tensors:
@@ -93,19 +95,26 @@ class ModelOrchestrator():
                 for device, (cached_task, cached_shard, shard_key) in self.cached_tasks.items():
                     if cached_task == model_task:
                         if cached_task.shard_dictionary[shard_key].model != model_shard.model:
+                            st = timer()
                             model_shard.model.to("cpu", non_blocking=True)
+                            end = timer()
+                            print("TIME TAKEN FOR MODEL DEMOTE: {}".format(end-st))
                         savables = cached_task.shard_to_input_dict[shard_key]
                         for key in ret_keys:
                             if key in savables:
                                 mark_saved.add(key)
-
+                total_st = timer()
                 for key in ret_keys:
                     if key not in mark_saved:
+                        
                         if returned_tensors[key] is not None:
+                            st = timer()
                             returned_tensors[key] = returned_tensors[key].to("cpu", non_blocking=True)
-                            
-            #end = timer()
-            #print("TIME TAKEN FOR DEMOTE: {}".format(end-st))
+                            end = timer()
+                            print("TIME TAKEN FOR TENSOR {} DEMOTE: {}".format(key, end-st))
+                total_end = timer()
+                print("TIME TAKEN FOR ALL TENSOR DEMOTE: {}".format(total_end-total_st))
+            
 
             if model_shard.direction == "f":
                 model_task.update_task(chosen_shard_index, ret_tensor_dictionary=returned_tensors)
@@ -138,8 +147,6 @@ class ModelOrchestrator():
     def train_models(self):
         print("****************************TRAINING STARTS***************************************")
         global thread_lock
-
-        
         # select initial tasks
         for device in self.all_devices:
             candidate_tasks = [t for t in self.tasks if len(t.candidate_shards) > 0] # selection candidates
@@ -256,16 +263,19 @@ class ModelOrchestrator():
                         else:
                             chosen_key, chosen_shard = cache_task.get_shard_blind() # get the first candidate 
                             
+                            
+                        #print("DB'ing {} at {}".format(chosen_key, timer()))
                         self.cached_tasks[device] = (cache_task, chosen_shard, chosen_key)
                         chosen_shard.model = chosen_shard.model.to(device, non_blocking=True) # Buffer up the model
                         
                         available_in_tensors, available_grad_tensors = cache_task.get_available_shard_inputs(chosen_key)
                         for t in available_in_tensors:
                             cache_task.tensor_dictionary[t] = cache_task.tensor_dictionary[t].to(device, non_blocking=True)
-                        for t in available_grad_tensors:
-                            if cache_task.grad_dictionary[t] is not None:
-                                cache_task.grad_dictionary[t] = cache_task.grad_dictionary[t].to(device, non_blocking=True)
-                        
+                        if available_grad_tensors is not None:
+                            for t in available_grad_tensors:
+                                if cache_task.grad_dictionary[t] is not None:
+                                    cache_task.grad_dictionary[t] = cache_task.grad_dictionary[t].to(device, non_blocking=True)
+                        #print("FINISHED DB'ing at {}".format(timer()))
      
 
             except KeyboardInterrupt:

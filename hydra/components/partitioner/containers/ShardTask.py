@@ -31,7 +31,7 @@ from timeit import default_timer as timer
 
 class ShardTask():
 
-    def __init__(self, model, direction, lr):
+    def __init__(self, model, direction, lr, key=0):
         self.lr = lr
         self.model = model
         for param in model.parameters():
@@ -40,36 +40,33 @@ class ShardTask():
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr = self.lr)
 
     def run(self, device, tensor_dictionary, gradient_tensor_dictionary=None):
-        #st = timer()
+        st = timer()
         self.model.to(device, non_blocking=True)
         for key, value in tensor_dictionary.items():
-            #st_in = timer()
+            st_in = timer()
             tensor_dictionary[key] = value.to(device, non_blocking=True)
-            #end_in = timer()
-            #print("KEY {} TOOK {}".format(key, end_in - st_in))
+            end_in = timer()
+            print("KEY {} TOOK {}".format(key, end_in - st_in))
         
         if self.direction == "f":
-            #end = timer()
-            #print("TIME TAKEN FOR PROMOTE: {}".format(end-st))
-            
-            #st = timer()
+            end = timer()
+            print("TIME TAKEN FOR PROMOTE: {}".format(end-st))
+
             vals = self.model.forward(tensor_dictionary)
-            #end = timer()
-            #print("TIME TAKEN FOR EXEC: {}".format(end-st))
+            end = timer()
+            print("TIME TAKEN FOR EXEC: {}".format(end-st))
         else:
             b_keys = gradient_tensor_dictionary.keys()
             for key in b_keys:
                 if gradient_tensor_dictionary[key] is not None:
                     gradient_tensor_dictionary[key] = gradient_tensor_dictionary[key].to(device, non_blocking=True)
-            #end = timer()
-            #print("TIME TAKEN FOR PROMOTE: {}".format(end-st))
+            end = timer()
+            print("TIME TAKEN FOR PROMOTE: {}".format(end-st))
             
-            #st = timer()
+            st = timer()
             vals = self.model.backward(tensor_dictionary, gradient_tensor_dictionary)
-            #end = timer()
-            #print("TIME TAKEN FOR EXEC: {}".format(end-st))
+            end = timer()
+            print("TIME TAKEN FOR EXEC: {}".format(end-st))
             self.optimizer.step()
             self.model.zero_grad()
-            
-            
         return vals
