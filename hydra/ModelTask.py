@@ -16,6 +16,7 @@ import torch
 import gc
 from timeit import default_timer as timer
 from hydra.utilities import get_free_space
+import random
 import numpy as np
 from torch import multiprocessing as multiprocessing
 from collections import defaultdict
@@ -284,34 +285,39 @@ class ModelTask():
         for shard in eval_shards:
             if self.shard_dictionary[shard].direction == "f":
                 req_tensors = self.shard_to_input_dict[shard]
-                if all(req in self.tensor_dictionary for req in req_tensors):
+                if all(req in self.dp_tensor_dictionary[dp_instance] for req in req_tensors):
                     self.candidate_shards[dp_instance].add(shard)
             else:
                 greq_tensors = self.shard_to_output_dict[shard]
                 req_tensors = self.shard_to_input_dict[shard]
-                if all(req in self.tensor_dictionary and greq in self.grad_dictionary for req, greq in zip(req_tensors, greq_tensors)):
-                    self.candidate_shards.add(shard)
+                if all(req in self.dp_tensor_dictionary[dp_instance] and greq in self.dp_grad_dictionary[dp_instance] for req, greq in zip(req_tensors, greq_tensors)):
+                    self.dp_candidate_shards[dp_instance].add(shard)
         
-        if (len(self.completed_shards) == len(self.total_shards)):
-            self.get_new_batch()
+        if (len(self.dp_completed_shards[dp_instance]) == len(self.total_shards)):
+            self.get_new_batch(dp_instance)
             
             
     """
         "Planned" candidates after shard key completes. Doesn't affect any class variables.
     """
-    def get_expected_update(self, key):
+    def get_expected_update(self, key, dp_instance):
+        
         gen_shard = self.shard_dictionary[key]
-        f_expected_total, b_expected_total = set(self.tensor_dictionary.keys()), set(self.grad_dictionary.keys())
+        f_expected_total, b_expected_total = set(self.dp_tensor_dictionary[dp_instance].keys()), set(self.dp_grad_dictionary[dp_instance].keys())
+        
         if gen_shard.direction == "f":
             expected_outs = self.shard_to_output_dict[key] # the intermediates the active shard will spit out
             f_expected_total.update(expected_outs)
-            eval_shards = (self.total_shards - self.completed_shards) - self.candidate_shards - self.blocked_shards
         else:
             expected_outs = self.shard_to_input_dict[key] # the gradients the active shard will spit out
             b_expected_total.update(expected_outs)
-            eval_shards = (self.total_shards - self.completed_shards) - self.candidate_shards  - self.blocked_shards
             
-        possibles = copy.copy(self.candidate_shards)
+        # Non-candidate shards that need to be evaluated for inclusion
+        eval_shards = (self.total_shards - self.dp_completed_shards) - self.candidate_shards  - self.blocked_shards
+            
+        possibles = copy.copy(self.dp_candidate_shards[dp_instance])
+        
+        
         for shard in eval_shards:
             if self.shard_dictionary[shard].direction == "f":
                 req_tensors = self.shard_to_input_dict[shard] # for this shard to run we need xyz
@@ -324,42 +330,47 @@ class ModelTask():
                     possibles.add(shard)
                     
         return possibles
+    
+    
     """
         Will be called for buffering. Blacklists this shard from being selected in future scheduling until minibatch
         finishes.
     """
     
-    def get_shard(self, key):
-        self.blocked_shards.add(key)
-        self.candidate_shards.discard(key)
-        shard_task = self.shard_dictionary[key]
+    def get_shard(self, key, dp_instance):
+        self.dp_blocked_shards[dp_instance].add(key)
+        self.dp_candidate_shards[dp_instance].discard(key)
+        shard_task = self.dp_shard_dictionary[dp_instance][key]
         return shard_task
     
-    def get_shard_blind(self):
-        key = self.candidate_shards.pop()
-        self.blocked_shards.add(key)
-        shard_task = self.shard_dictionary[key]
+    def get_shard_blind_from_dp(self, dp_instance):
+        key = self.dp_candidate_shards[dp_instance].pop()
+        self.dp_blocked_shards[dp_instance].add(key)
+        shard_task = self.dp_shard_dictionary[dp_instance][key]
+        
         return key, shard_task
     
-    def get_available_shard_inputs(self, key):
+
+    
+    def get_available_shard_inputs(self, key, dp_instance):
         shard_task = self.shard_dictionary[key]
         tensor_requests = self.shard_to_input_dict[key]
-        input_tensors = [k for k in tensor_requests if k in self.tensor_dictionary]
+        
+        input_tensors = [k for k in tensor_requests if k in self.dp_tensor_dictionary[dp_instance]]
         if shard_task.direction == "b":
             grad_requests = self.shard_to_output_dict[key]
-            grad_tensors = [k for k in grad_requests if k in self.grad_dictionary]
+            grad_tensors = [k for k in grad_requests if k in self.dp_grad_dictionary[dp_instance]]
         else:
             grad_tensors = None
         return input_tensors, grad_tensors
     
-
-    def get_shard_inputs(self, key):
+    def get_shard_inputs(self, key, dp_instance):
         shard_task = self.shard_dictionary[key]
         tensor_requests = self.shard_to_input_dict[key]
-        input_tensors = {k: self.tensor_dictionary[k] for k in tensor_requests}
+        input_tensors = {k: self.dp_tensor_dictionary[dp_instance][k] for k in tensor_requests}
         if shard_task.direction == "b":
             grad_requests = self.shard_to_output_dict[key]
-            grad_tensors = {k: self.grad_dictionary[k] for k in grad_requests}
+            grad_tensors = {k: self.dp_grad_dictionary[dp_instance][k] for k in grad_requests}
         else:
             grad_tensors = None
         return input_tensors, grad_tensors
