@@ -39,6 +39,10 @@ class ModelTask():
     
     def __init__(self, name, layer_dictionary, io_dictionary, dataloader, lr, epochs, verbose=0):
         
+        
+        self.data_parallel_degree = 4
+        
+        
         """
             Understanding arbitrary model execution requires a "mapping" of inputs and outputs in the model.
             For this purpose, we use three Python dictionaries.
@@ -62,6 +66,7 @@ class ModelTask():
         
         self.layer_to_output_dict = defaultdict(list)
         
+
         self.tensor_dictionary = {}
         self.grad_dictionary = {}
         
@@ -107,6 +112,21 @@ class ModelTask():
         self.completed_shards = set() # how many shards have been run
         
         
+        self.endpoint_keys = None
+        
+        """
+        
+            DP Clones
+        
+        """
+        
+        self.dp_shard_dicts = []
+        self.dp_tensor_dicts = [{} for x in range(self.data_parallel_degree)]
+        self.dp_grad_dicts = [{} for x in range(self.data_parallel_degree)]
+        self.dp_candidate_shards = []
+        self.dp_blocked_shards = []
+        self.dp_completed_shards = []
+        
         
         self.global_timer = 0 # used to identify running times
         self.name = name # used in debugging
@@ -134,11 +154,24 @@ class ModelTask():
         self.blocked_devices = []
         
     def setup(self, buffer=None, shard_dictionary=None, shard_to_input_dict=None, shard_to_output_dict=None, mini_batch_time=None):
+        
+        
         if shard_dictionary is not None:
             self.shard_dictionary = shard_dictionary
             self.shard_to_input_dict = shard_to_input_dict
             self.shard_to_output_dict = shard_to_output_dict
             self.mini_batch_time = mini_batch_time
+            
+            self.endpoint_keys = self.layer_to_input_dict.keys() - self.layer_to_output_dict.keys()
+            
+            """
+                DP Copies
+            """
+
+            for d in range(self.data_parallel_degree):
+                new_sh_dict = {k: task.copy() for k, task in shard_dictionary.items()}
+                self.dp_shard_dicts.append(new_sh_dict)
+   
         else:
             # generate shards and expected minibatch runtime
             self.shard_dictionary, self.shard_to_input_dict, self.shard_to_output_dict, self.batch_time = self.partitioner.shard(
@@ -153,19 +186,44 @@ class ModelTask():
             
         self.total_shards = self.shard_dictionary.keys() # which shards to run overall
             
-        self.get_new_batch()
+        for d in self.data_parallel_degree:
+            self.get_new_batch(d)
         
-    def get_new_batch(self):
-        # Reset the tensor dictionary and gradient dictionary
-        self.tensor_dictionary = {}
-        self.candidate_shards = set()
-        self.completed_shards = set()
-        self.grad_dictionary = {}
-        self.blocked_shards = set()
-        endpoint_keys = self.layer_to_input_dict.keys() - self.layer_to_output_dict.keys()
-        for key in endpoint_keys:
-            self.grad_dictionary[key] = None
+    def get_new_batch(self, dp_instance):
+        
+        
+        """
+            DP Synchronization
+        
+        """
+        for key in self.shard_dictionary.keys():
+            sdA = self.shard_dictionary[key].state_dict()
+            sdB = self.shard_to_input_dict[key].state_dict()
 
+            # Average all parameters
+            for key in sdA:
+                sdB[key] = (sdB[key] + sdA[key]) / 2.
+
+            self.shard_dictionary[key].load_state_dict(sdB)
+        
+        # Reset the tensor dictionary and gradient dictionary
+        self.dp_tensor_dicts[dp_instance] = {}
+        self.dp_candidate_shards[dp_instance] = set()
+        self.completed_shards[dp_instance] = set()
+        self.grad_dictionary[dp_instance] = {}
+        self.dp_blocked_shards[dp_instance] = set()
+        
+        
+        
+        for key in self.endpoint_keys:
+            self.dp_grad_dictionary[dp_instance][key] = None
+
+        
+        """
+        
+            Batch statistics update
+        
+        """
         
         # Update minibatch, handle new batch as well
         try:
@@ -183,36 +241,41 @@ class ModelTask():
         completed_mbs = self.total_length - self.minibatches_remaining
         if (completed_mbs % 1 == 0):
             print("MODEL: {}, EPOCH: {}, MBS: {} / {}".format(self.name, self.total_epochs-self.epochs, completed_mbs, self.total_length))
-        
+            
+            
+        """
+            Re-initialize tensor dictionary
+            
+        """
         
         # initialize the tensor dictionary with initial minibatch
         if not isinstance(batch, torch.Tensor):
             for idx, tensor in enumerate(batch):
-                self.tensor_dictionary["batch_{}".format(idx)] = tensor
+                self.dp_tensor_dictionary[dp_instance]["batch_{}".format(idx)] = tensor
         else:
-            self.tensor_dictionary["batch_0"] = batch 
+            self.dp_tensor_dictionary[dp_instance]["batch_0"] = batch 
 
-        # initialize the tensor dictionary with initial minibatch
         if not isinstance(label, torch.Tensor):
             for idx, tensor in enumerate(label):
-                self.tensor_dictionary["label_{}".format(idx)] = tensor
+                self.dp_tensor_dictionary[dp_instance]["label_{}".format(idx)] = tensor
         else:
-            self.tensor_dictionary["label_0"] = label 
+            self.dp_tensor_dictionary[dp_instance]["label_0"] = label 
         
         self.update_task()
+        
             
     """
         Updates the ModelTask. Should be called after each shard completion.
     """
-    def update_task(self, completed_index=None, ret_tensor_dictionary=None, ret_grad_dictionary=None):
+    def update_task(self, dp_instance, completed_index=None, ret_tensor_dictionary=None, ret_grad_dictionary=None):
         if completed_index is not None:
-            self.completed_shards.add(completed_index)
+            self.dp_completed_shards[dp_instance].add(completed_index)
             
         if ret_tensor_dictionary is not None:
-            self.tensor_dictionary.update(ret_tensor_dictionary)
+            self.dp_tensor_dictionary[dp_instance].update(ret_tensor_dictionary)
             
         if ret_grad_dictionary is not None:
-            self.grad_dictionary.update(ret_grad_dictionary)
+            self.dp_grad_dictionary[dp_instance].update(ret_grad_dictionary)
         
         # get shards that are not already executed or primed
         eval_shards = (self.total_shards - self.completed_shards) - self.candidate_shards  - self.blocked_shards
@@ -222,7 +285,7 @@ class ModelTask():
             if self.shard_dictionary[shard].direction == "f":
                 req_tensors = self.shard_to_input_dict[shard]
                 if all(req in self.tensor_dictionary for req in req_tensors):
-                    self.candidate_shards.add(shard)
+                    self.candidate_shards[dp_instance].add(shard)
             else:
                 greq_tensors = self.shard_to_output_dict[shard]
                 req_tensors = self.shard_to_input_dict[shard]

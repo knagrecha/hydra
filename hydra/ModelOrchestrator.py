@@ -74,9 +74,7 @@ class ModelOrchestrator():
 
     def train_shard_on_device(self, model_shard, model_task, input_tensors, grad_tensors, chosen_device, chosen_shard_index):
         try:
-            print("EXEC ST {} at {}".format(chosen_shard_index, timer()))
             returned_tensors = model_shard.run(chosen_device, input_tensors, grad_tensors) # run the model
-            print("EXEC END {} at {}".format(chosen_shard_index, timer()))
             #end = timer()
             # if any of the tensors are requested by a cached shard, then do not move them (mark_saved), otherwise
             # send to CPU
@@ -95,25 +93,18 @@ class ModelOrchestrator():
                 for device, (cached_task, cached_shard, shard_key) in self.cached_tasks.items():
                     if cached_task == model_task:
                         if cached_task.shard_dictionary[shard_key].model != model_shard.model:
-                            st = timer()
                             model_shard.model.to("cpu", non_blocking=True)
-                            end = timer()
-                            print("TIME TAKEN FOR MODEL DEMOTE: {}".format(end-st))
                         savables = cached_task.shard_to_input_dict[shard_key]
                         for key in ret_keys:
                             if key in savables:
                                 mark_saved.add(key)
-                total_st = timer()
+
                 for key in ret_keys:
                     if key not in mark_saved:
                         
                         if returned_tensors[key] is not None:
-                            st = timer()
                             returned_tensors[key] = returned_tensors[key].to("cpu", non_blocking=True)
-                            end = timer()
-                            print("TIME TAKEN FOR TENSOR {} DEMOTE: {}".format(key, end-st))
-                total_end = timer()
-                print("TIME TAKEN FOR ALL TENSOR DEMOTE: {}".format(total_end-total_st))
+
             
 
             if model_shard.direction == "f":
