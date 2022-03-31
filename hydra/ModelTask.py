@@ -201,14 +201,14 @@ class ModelTask():
         
         for key in self.shard_dictionary.keys():
             if self.shard_dictionary[key].direction == "b":
-                print("DP SYNC WITH INSTANCE: {} SHARD: {}".format(dp_instance, key))
-                sdA = self.shard_dictionary[key].model.state_dict()
                 sdB = self.dp_shard_dictionary[dp_instance][key].model.state_dict()
+                sdA = self.shard_dictionary[key].model.state_dict()
                 # Average all parameters
                 for sub_key in sdA:
-                    sdB[sub_key] = (sdB[sub_key] + sdA[sub_key]) / 2.
-
+                    sdB[sub_key] = (sdB[sub_key].cpu() + sdA[sub_key]) / 2.
                 self.shard_dictionary[key].model.load_state_dict(sdB)
+                self.shard_dictionary[key].model = self.shard_dictionary[key].model.to("cpu", non_blocking=True)
+                
         
         # Reset the tensor dictionary and gradient dictionary
         self.dp_tensor_dictionary[dp_instance] = {}
@@ -282,7 +282,7 @@ class ModelTask():
             self.dp_grad_dictionary[dp_instance].update(ret_grad_dictionary)
         
         # get shards that are not already executed or primed
-        eval_shards = (self.total_shards - self.completed_shards) - self.candidate_shards  - self.blocked_shards
+        eval_shards = (self.total_shards - self.dp_completed_shards[dp_instance]) - self.dp_candidate_shards[dp_instance]  - self.dp_blocked_shards[dp_instance]
         
         # check if their dependencies have been resolved
         for shard in eval_shards:
@@ -295,6 +295,9 @@ class ModelTask():
                 req_tensors = self.shard_to_input_dict[shard]
                 if all(req in self.dp_tensor_dictionary[dp_instance] and greq in self.dp_grad_dictionary[dp_instance] for req, greq in zip(req_tensors, greq_tensors)):
                     self.dp_candidate_shards[dp_instance].add(shard)
+        
+        
+        print("TASK {} DP INSTANCE {} OUTPUTS UPDATED ON COMPLETION OF {}".format(self.name, dp_instance, completed_index))
         
         if (len(self.dp_completed_shards[dp_instance]) == len(self.total_shards)):
             self.get_new_batch(dp_instance)
@@ -370,6 +373,8 @@ class ModelTask():
     def get_shard_inputs(self, key, dp_instance):
         shard_task = self.shard_dictionary[key]
         tensor_requests = self.shard_to_input_dict[key]
+        print("SEARCHING FOR INPUTS FOR SHARD {} DP INSTANCE {}".format(key, dp_instance))
+        print("AVAILABLE TENSORS: {}".format(self.dp_tensor_dictionary[dp_instance].keys()))
         input_tensors = {k: self.dp_tensor_dictionary[dp_instance][k] for k in tensor_requests}
         if shard_task.direction == "b":
             grad_requests = self.shard_to_output_dict[key]

@@ -112,9 +112,9 @@ class ModelOrchestrator():
             
 
             if model_shard.direction == "f":
-                model_task.update_task(chosen_shard_index, ret_tensor_dictionary=returned_tensors)
+                model_task.update_task(chosen_dp_instance, chosen_shard_index, ret_tensor_dictionary=returned_tensors)
             else:
-                model_task.update_task(chosen_shard_index, ret_grad_dictionary=returned_tensors)
+                model_task.update_task(chosen_dp_instance, chosen_shard_index, ret_grad_dictionary=returned_tensors)
                 
             if model_task.epochs <= 0:
                 self.tasks.remove(model_task)
@@ -131,10 +131,12 @@ class ModelOrchestrator():
             print(e)
             
     def lock_device(self, chosen):
+        print("LOCKING {}".format(chosen))
         self.active_devices.append(chosen)
         self.available_devices.remove(chosen)
     
     def unlock_device(self, chosen):
+        print("UNLOCKING {}".format(chosen))
         self.active_devices.remove(chosen)
         self.available_devices.append(chosen)
     
@@ -191,6 +193,7 @@ class ModelOrchestrator():
                         if len(t.dp_candidate_shards[d]) > 0:
                             candidate_tasks.append((t, d)) # selection candidates
 
+            print("CANDIDATE TASKS FOR DEVICE {}: {}".format(device, candidate_tasks))
             lrt = -1 # Sharded-LRTF selection - start by calculating LRT
             cache_task = None
             chosen_dp = 0
@@ -246,13 +249,11 @@ class ModelOrchestrator():
                     
                     # if no cached task was possible, revert to standard scheduling
                     else:
-                        # select initial tasks
-                        for device in self.all_devices:
-                            candidate_tasks = []
-                            for t in self.tasks:
-                                for d in range(t.data_parallel_degree):
-                                    if len(t.dp_candidate_shards[d]) > 0:
-                                        candidate_tasks.append((t, d))
+                        candidate_tasks = []
+                        for t in self.tasks:
+                            for d in range(t.data_parallel_degree):
+                                if len(t.dp_candidate_shards[d]) > 0:
+                                    candidate_tasks.append((t, d))
                                         
                         if (len(candidate_tasks) > 0):
                             
@@ -263,7 +264,6 @@ class ModelOrchestrator():
                             chosen_key, chosen_shard = chosen_task.get_shard_blind_from_dp(chosen_dp) # get the first candidate 
                             in_tensors, grad_tensors = chosen_task.get_shard_inputs(chosen_key, chosen_dp)
                             self.active_tasks[device] = (chosen_task, chosen_key, chosen_dp)
-                            candidate_tasks.remove(chosen_task)
                             self.thread_pool.submit(self.train_shard_on_device, chosen_shard, chosen_task, 
                                                     in_tensors, grad_tensors, device, chosen_key, chosen_dp)
 
@@ -306,6 +306,7 @@ class ModelOrchestrator():
                         self.cached_tasks[device] = (cache_task, chosen_shard, chosen_key, chosen_dp)
                         chosen_shard.model = chosen_shard.model.to(device, non_blocking=True) # Buffer up the model
                         print("BUFFERING TASK {} SHARD {} DP {}".format(cache_task.name, chosen_key, chosen_dp))
+                        
                         
                         # POSSIBLY COMMENT OUT THIS LOWER SECTION
                         available_in_tensors, available_grad_tensors = cache_task.get_available_shard_inputs(chosen_key, chosen_dp)
