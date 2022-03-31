@@ -32,7 +32,7 @@ from timeit import default_timer as timer
 
 class ShardTask():
 
-    def __init__(self, model, direction, lr, key=0):
+    def __init__(self, model, direction, lr):
         self.lr = lr
         self.model = model
         for param in model.parameters():
@@ -41,7 +41,7 @@ class ShardTask():
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr = self.lr)
         
     def copy(self):
-        return ShardTask(copy.deepcopy(self.model), direction, lr, key)
+        return ShardTask(copy.deepcopy(self.model), self.direction, self.lr)
 
     def run(self, device, tensor_dictionary, gradient_tensor_dictionary=None):
         self.model.to(device, non_blocking=True)

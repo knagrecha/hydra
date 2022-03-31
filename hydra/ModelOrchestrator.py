@@ -147,7 +147,7 @@ class ModelOrchestrator():
         for device in self.all_devices:
             candidate_tasks = []
             for t in self.tasks:
-                for d in t.data_parallel_degree:
+                for d in range(t.data_parallel_degree):
                     if len(t.dp_candidate_shards[d]) > 0:
                         candidate_tasks.append((t, d))
 
@@ -166,6 +166,7 @@ class ModelOrchestrator():
                 in_tensors, grad_tensors = chosen_task.get_shard_inputs(chosen_key, chosen_dp)
                 
                 self.active_tasks[device] = (chosen_task, chosen_key, chosen_dp)
+                print("EXECUTING TASK {} SHARD {} DP {}".format(chosen_task.name, chosen_key, chosen_dp))
                 self.thread_pool.submit(self.train_shard_on_device, chosen_shard, chosen_task, 
                                         in_tensors, grad_tensors, device, chosen_key, chosen_dp)
 
@@ -179,7 +180,7 @@ class ModelOrchestrator():
             active_task_specific_shard_pool = None # shards of same task that will be valid after current shard
             
             for t in self.tasks:
-                for d in t.data_parallel_degree:
+                for d in range(t.data_parallel_degree):
                     if t == self.active_tasks[device][0] and d == self.active_tasks[device][2]:
                         # what outputs will be available AFTER the current shard completes?
                         active_task_specific_shard_pool = t.get_expected_update(self.active_tasks[device][1], self.active_tasks[device][2])
@@ -213,6 +214,7 @@ class ModelOrchestrator():
                     chosen_key, chosen_shard = cache_task.get_shard_blind_from_dp(chosen_dp) # get the first candidate 
                     
                 self.cached_tasks[device] = (cache_task, chosen_shard, chosen_key, chosen_dp)
+                print("BUFFERING TASK {} SHARD {} DP {}".format(cache_task.name, chosen_key, chosen_dp))
                 chosen_shard.model = chosen_shard.model.to(device, non_blocking=True) # Buffer up the model
 
         start = timer()
@@ -238,6 +240,7 @@ class ModelOrchestrator():
                             self.lock_device(device)
                             self.active_tasks[device] = (cache_task, chosen_key, chosen_dp)
                             self.cached_tasks[device] = (None, None, None, None)
+                            print("EXECUTING TASK {} SHARD {} DP {}".format(cache_task.name, chosen_key, chosen_dp))
                             self.thread_pool.submit(self.train_shard_on_device, chosen_shard, cache_task, 
                                         in_tensors, grad_tensors, device, chosen_key, chosen_dp)
                     
@@ -247,7 +250,7 @@ class ModelOrchestrator():
                         for device in self.all_devices:
                             candidate_tasks = []
                             for t in self.tasks:
-                                for d in t.data_parallel_degree:
+                                for d in range(t.data_parallel_degree):
                                     if len(t.dp_candidate_shards[d]) > 0:
                                         candidate_tasks.append((t, d))
                                         
@@ -269,7 +272,7 @@ class ModelOrchestrator():
                     candidate_tasks = []
                     active_task_specific_shard_pool = None # shards of same task that will be valid after current shard
                     for t in self.tasks:
-                        for d in t.data_parallel_degree:
+                        for d in range(t.data_parallel_degree):
                             if t == self.active_tasks[device][0] and d  == self.active_tasks[device][2]:
                                 active_task_specific_shard_pool = t.get_expected_update(self.active_tasks[device][1], self.active_tasks[device][2])
 
@@ -302,7 +305,7 @@ class ModelOrchestrator():
                         #print("DB'ing {} at {}".format(chosen_key, timer()))
                         self.cached_tasks[device] = (cache_task, chosen_shard, chosen_key, chosen_dp)
                         chosen_shard.model = chosen_shard.model.to(device, non_blocking=True) # Buffer up the model
-                        
+                        print("BUFFERING TASK {} SHARD {} DP {}".format(cache_task.name, chosen_key, chosen_dp))
                         
                         # POSSIBLY COMMENT OUT THIS LOWER SECTION
                         available_in_tensors, available_grad_tensors = cache_task.get_available_shard_inputs(chosen_key, chosen_dp)

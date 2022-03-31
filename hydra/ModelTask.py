@@ -41,7 +41,7 @@ class ModelTask():
     def __init__(self, name, layer_dictionary, io_dictionary, dataloader, lr, epochs, verbose=0):
         
         
-        self.data_parallel_degree = 4
+        self.data_parallel_degree = 2
         
         
         """
@@ -121,12 +121,12 @@ class ModelTask():
         
         """
         
-        self.dp_shard_dicts = []
-        self.dp_tensor_dicts = [{} for x in range(self.data_parallel_degree)]
-        self.dp_grad_dicts = [{} for x in range(self.data_parallel_degree)]
-        self.dp_candidate_shards = []
-        self.dp_blocked_shards = []
-        self.dp_completed_shards = []
+        self.dp_shard_dictionary = []
+        self.dp_tensor_dictionary = [{} for x in range(self.data_parallel_degree)]
+        self.dp_grad_dictionary = [{} for x in range(self.data_parallel_degree)]
+        self.dp_candidate_shards = [set() for x in range(self.data_parallel_degree)]
+        self.dp_blocked_shards = [set() for x in range(self.data_parallel_degree)]
+        self.dp_completed_shards = [set() for x in range(self.data_parallel_degree)]
         
         
         self.global_timer = 0 # used to identify running times
@@ -170,8 +170,9 @@ class ModelTask():
             """
 
             for d in range(self.data_parallel_degree):
+                print("CREATING DP INSTANCE: {}".format(d))
                 new_sh_dict = {k: task.copy() for k, task in shard_dictionary.items()}
-                self.dp_shard_dicts.append(new_sh_dict)
+                self.dp_shard_dictionary.append(new_sh_dict)
    
         else:
             # generate shards and expected minibatch runtime
@@ -187,7 +188,7 @@ class ModelTask():
             
         self.total_shards = self.shard_dictionary.keys() # which shards to run overall
             
-        for d in self.data_parallel_degree:
+        for d in range(self.data_parallel_degree):
             self.get_new_batch(d)
         
     def get_new_batch(self, dp_instance):
@@ -197,21 +198,23 @@ class ModelTask():
             DP Synchronization
         
         """
+        
         for key in self.shard_dictionary.keys():
-            sdA = self.shard_dictionary[key].state_dict()
-            sdB = self.shard_to_input_dict[key].state_dict()
+            if self.shard_dictionary[key].direction == "b":
+                print("DP SYNC WITH INSTANCE: {} SHARD: {}".format(dp_instance, key))
+                sdA = self.shard_dictionary[key].model.state_dict()
+                sdB = self.dp_shard_dictionary[dp_instance][key].model.state_dict()
+                # Average all parameters
+                for sub_key in sdA:
+                    sdB[sub_key] = (sdB[sub_key] + sdA[sub_key]) / 2.
 
-            # Average all parameters
-            for key in sdA:
-                sdB[key] = (sdB[key] + sdA[key]) / 2.
-
-            self.shard_dictionary[key].load_state_dict(sdB)
+                self.shard_dictionary[key].model.load_state_dict(sdB)
         
         # Reset the tensor dictionary and gradient dictionary
-        self.dp_tensor_dicts[dp_instance] = {}
+        self.dp_tensor_dictionary[dp_instance] = {}
         self.dp_candidate_shards[dp_instance] = set()
-        self.completed_shards[dp_instance] = set()
-        self.grad_dictionary[dp_instance] = {}
+        self.dp_completed_shards[dp_instance] = set()
+        self.dp_grad_dictionary[dp_instance] = {}
         self.dp_blocked_shards[dp_instance] = set()
         
         
@@ -262,7 +265,7 @@ class ModelTask():
         else:
             self.dp_tensor_dictionary[dp_instance]["label_0"] = label 
         
-        self.update_task()
+        self.update_task(dp_instance)
         
             
     """
@@ -286,7 +289,7 @@ class ModelTask():
             if self.shard_dictionary[shard].direction == "f":
                 req_tensors = self.shard_to_input_dict[shard]
                 if all(req in self.dp_tensor_dictionary[dp_instance] for req in req_tensors):
-                    self.candidate_shards[dp_instance].add(shard)
+                    self.dp_candidate_shards[dp_instance].add(shard)
             else:
                 greq_tensors = self.shard_to_output_dict[shard]
                 req_tensors = self.shard_to_input_dict[shard]
@@ -313,7 +316,7 @@ class ModelTask():
             b_expected_total.update(expected_outs)
             
         # Non-candidate shards that need to be evaluated for inclusion
-        eval_shards = (self.total_shards - self.dp_completed_shards) - self.candidate_shards  - self.blocked_shards
+        eval_shards = (self.total_shards - self.dp_completed_shards[dp_instance]) - self.dp_candidate_shards[dp_instance]  - self.dp_blocked_shards[dp_instance]
             
         possibles = copy.copy(self.dp_candidate_shards[dp_instance])
         
