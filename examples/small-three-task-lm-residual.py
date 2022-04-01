@@ -152,7 +152,7 @@ def get_model(name, layer_count):
     while not excess:
         local_dictionary = {}
         local_input = {}
-        for i in range(8):
+        for i in range(3):
             if i == 0:
                 f_shard_input.append(io_dictionary[curr_layer])
                 b_shard_input.append(io_dictionary[curr_layer])
@@ -213,7 +213,7 @@ def main():
 
     device_count = torch.cuda.device_count()
 
-    model_0 = get_model("Model_0", 16)
+    model_0 = get_model("Model_0", 6)
     
     """
     print("RUNTIME COMPARISON")

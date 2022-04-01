@@ -18,9 +18,33 @@ from timeit import default_timer as timer
 from hydra.utilities import get_free_space
 import random
 import numpy as np
-from torch import multiprocessing as multiprocessing
+from torch import multiprocessing as mp
 from collections import defaultdict
 import copy
+
+
+
+
+
+
+
+def update_shared_parameters(base_model, queue):
+    
+    print("SETTING UP BASE OPTIMIZERS")
+    local_optimizers = {k: torch.optim.SGD(base_model[k].parameters()) for k in base_model.keys()}
+    print("DONE SETTING UP BASE OPTIMIZERS")
+    while True:
+        shard_key = queue.get()
+        state_dict = queue.get()
+        print("INPUT RECEIVED!")
+        for param_x, param_y in zip(base_model[shard_key].parameters(), state_dict):
+            param_x._grad = param_y.cpu()
+        
+        local_optimizers[shard_key].step()
+
+
+
+
 
 class ModelTask():
     #def __init__(self, name, model, criterion, dataloader, lr, epochs, global_timer=None, use_scaler=False, partitioner=Pilot()):
@@ -64,6 +88,8 @@ class ModelTask():
         """
         self.layer_dictionary = layer_dictionary
         self.layer_to_input_dict = io_dictionary
+        
+        self.mp_queue = mp.Queue()
         
         self.layer_to_output_dict = defaultdict(list)
         
@@ -183,8 +209,17 @@ class ModelTask():
                                                                             self.lr, 
                                                                             self.verbose
                                                                             )
+        
+        
+        
+        print("SHARING MODEL MEMORY")
         for key, shard in self.shard_dictionary.items():
             shard.model = shard.model.cpu()
+            shard.model.share_memory()
+            
+        print("CREATING EXECUTION PROCESS")
+        self.base_model_process = mp.Process(target=update_shared_parameters, args=(self.shard_dictionary, self.mp_queue))
+        self.base_model_process.start()
             
         self.total_shards = self.shard_dictionary.keys() # which shards to run overall
             
@@ -198,18 +233,7 @@ class ModelTask():
             DP Synchronization
         
         """
-        
-        for key in self.shard_dictionary.keys():
-            if self.shard_dictionary[key].direction == "b":
-                sdB = self.dp_shard_dictionary[dp_instance][key].model.state_dict()
-                sdA = self.shard_dictionary[key].model.state_dict()
-                # Average all parameters
-                for sub_key in sdA:
-                    sdB[sub_key] = (sdB[sub_key].cpu() + sdA[sub_key]) / 2.
-                self.shard_dictionary[key].model.load_state_dict(sdB)
-                self.shard_dictionary[key].model = self.shard_dictionary[key].model.to("cpu", non_blocking=True)
-                
-        
+
         # Reset the tensor dictionary and gradient dictionary
         self.dp_tensor_dictionary[dp_instance] = {}
         self.dp_candidate_shards[dp_instance] = set()
@@ -272,7 +296,12 @@ class ModelTask():
         Updates the ModelTask. Should be called after each shard completion.
     """
     def update_task(self, dp_instance, completed_index=None, ret_tensor_dictionary=None, ret_grad_dictionary=None):
+
         if completed_index is not None:
+            if self.shard_dictionary[completed_index].direction == "b":
+                self.mp_queue.put(completed_index)
+                self.mp_queue.put(self.dp_shard_dictionary[dp_instance][completed_index].state_dict())
+                
             self.dp_completed_shards[dp_instance].add(completed_index)
             
         if ret_tensor_dictionary is not None:
