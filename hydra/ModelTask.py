@@ -31,20 +31,29 @@ import copy
 def update_shared_parameters(base_model, queue):
     
     print("SETTING UP BASE OPTIMIZERS")
-    local_optimizers = {k: torch.optim.SGD(base_model[k].parameters()) for k in base_model.keys()}
+    local_optimizers = {k: torch.optim.SGD(base_model[k].model.parameters(), lr=0.0001) for k in base_model.keys()}
     print("DONE SETTING UP BASE OPTIMIZERS")
     while True:
-        shard_key = queue.get()
-        state_dict = queue.get()
-        print("INPUT RECEIVED!")
-        for param_x, param_y in zip(base_model[shard_key].parameters(), state_dict):
-            param_x._grad = param_y.cpu()
+        print("\n\n\n\n\nWAITING\n\n\n\n\n")
+        shard_key = queue.get(block=True)
+        state_dict = queue.get(block=True)
+        print("RECEIVED!")
+        for name, param_x in base_model[shard_key].model.named_parameters():
+            print("UPDATING: {}".format(name))
+            param_x.grad = state_dict[name].cpu().clone()
+
+        print("GRADS APPLIED")
         
-        local_optimizers[shard_key].step()
-
-
-
-
+        for name, param_x in base_model[shard_key].model.named_parameters():
+            print(param_x.grad)
+        try:
+            local_optimizers[shard_key].step()
+        except Exception as e:
+            print(e)
+        print("ONE PASS DONE")
+        del state_dict
+        del shard_key
+        print("CLEANED UP TOO!")
 
 class ModelTask():
     #def __init__(self, name, model, criterion, dataloader, lr, epochs, global_timer=None, use_scaler=False, partitioner=Pilot()):
@@ -66,8 +75,7 @@ class ModelTask():
         
         
         self.data_parallel_degree = 2
-        
-        
+
         """
             Understanding arbitrary model execution requires a "mapping" of inputs and outputs in the model.
             For this purpose, we use three Python dictionaries.
@@ -297,10 +305,16 @@ class ModelTask():
     """
     def update_task(self, dp_instance, completed_index=None, ret_tensor_dictionary=None, ret_grad_dictionary=None):
 
+        
+
         if completed_index is not None:
             if self.shard_dictionary[completed_index].direction == "b":
+                grad_dict = {}
+                for key, value in self.dp_shard_dictionary[dp_instance][completed_index].model.named_parameters():
+                    grad_dict[key] = value.grad.cpu().clone()
                 self.mp_queue.put(completed_index)
-                self.mp_queue.put(self.dp_shard_dictionary[dp_instance][completed_index].state_dict())
+                self.mp_queue.put(grad_dict)
+                self.dp_shard_dictionary[dp_instance][completed_index].model.zero_grad()
                 
             self.dp_completed_shards[dp_instance].add(completed_index)
             

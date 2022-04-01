@@ -97,6 +97,7 @@ class ModelOrchestrator():
                     if cached_task == model_task:
                         if cached_task.dp_shard_dictionary[dp_instance][shard_key].model != model_shard.model:
                             model_shard.model.to("cpu", non_blocking=True)
+                            
                         
                         if chosen_dp_instance == dp_instance:
                             savables = cached_task.shard_to_input_dict[shard_key]

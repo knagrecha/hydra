@@ -56,6 +56,5 @@ class ShardTask():
                 if gradient_tensor_dictionary[key] is not None:
                     gradient_tensor_dictionary[key] = gradient_tensor_dictionary[key].to(device, non_blocking=True)
             vals = self.model.backward(tensor_dictionary, gradient_tensor_dictionary)
-            self.optimizer.step()
-            self.model.zero_grad()
+
         return vals
