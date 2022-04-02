@@ -53,7 +53,7 @@ class ShardTask():
             print("TIME TAKEN FOR PROMOTE: {}".format(end-st))
             st = timer()
             vals = self.model.forward(tensor_dictionary)
-
+            del tensor_dictionary
             print("TIME TAKEN FOR EXEC: {}".format(end-st))
         else:
             b_keys = gradient_tensor_dictionary.keys()
@@ -65,6 +65,7 @@ class ShardTask():
             
             st = timer()
             vals = self.model.backward(tensor_dictionary, gradient_tensor_dictionary)
+            del gradient_tensor_dictionary
             end = timer()
             print("TIME TAKEN FOR EXEC: {}".format(end-st))
         return vals

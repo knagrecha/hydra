@@ -95,10 +95,12 @@ def execute_train(device_rank, pipe):
         f_save_tensors = pipe.recv() # which forward tensors (if any) should I not offload?
         b_save_tensors = pipe.recv() # which backward tensors (if any) should I not offload?
         ret_keys = returned_tensors.keys()
+        print("PRODUCED KEYS: {}".format(ret_keys))
+        
         for key in ret_keys:
             if key in f_save_tensors:
                 local_saved_f_tensors[key] = returned_tensors[key]
-            elif key in b_save_tensors:
+            elif  model_shard.direction == "b" and key in b_save_tensors:
                 local_saved_b_tensors[key] = returned_tensors[key]
 
             # Only send back CPU tensors, avoids CUDA sharing errors.    

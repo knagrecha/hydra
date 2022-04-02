@@ -73,11 +73,15 @@ class GenericExecutor(nn.Module):
         Forward pass will make use of the topological ordering.
     """
     def forward_helper(self, tensor_dictionary):
+        out_dict = {}
         for layer in self.execution_order:
             reqs = self.input_dictionary[layer]
             requested_inputs = [ tensor_dictionary[req] for req in reqs ]
             tensor_dictionary[layer] = self.layer_dictionary[layer](*requested_inputs) # plug in all requested inputs
-        return tensor_dictionary
+            if layer in self.requested_outputs:
+                out_dict[layer] = tensor_dictionary[layer]
+        del tensor_dictionary
+        return out_dict
         
     def forward(self, tensor_dictionary, no_grad=True):
         if no_grad:
@@ -93,6 +97,8 @@ class GenericExecutor(nn.Module):
     
     def backward(self, in_tensor_dict, grad_tensor_dict): 
         saved_in = copy.copy(in_tensor_dict)
+        
+        return_grads = {}
         successful_pass = False
         # if not the initial batch, we need gradients to pass back
         for key, value in in_tensor_dict.items():
@@ -110,6 +116,6 @@ class GenericExecutor(nn.Module):
         # record gradients if available
         for key, value in saved_in.items():
             if not ( isinstance(key, str) ):
-                grad_tensor_dict[key] = value.grad # define the gradient to be passed back
-
-        return grad_tensor_dict
+                return_grads[key] = value.grad # define the gradient to be passed back
+        del grad_tensor_dict
+        return return_grads
