@@ -90,7 +90,9 @@ def execute_train(device_rank, pipe):
             
         should_offload = pipe.recv() # should I offload my model?
         if should_offload:
-            model_shard.model.to("cpu", non_blocking=True)
+            print("OFFLOADING MODEL")
+            model_shard.model.cpu()
+            print("OFFLOAD DEVICE: {}".format(next(model_shard.model.parameters()).device))
             
         f_save_tensors = pipe.recv() # which forward tensors (if any) should I not offload?
         b_save_tensors = pipe.recv() # which backward tensors (if any) should I not offload?
@@ -187,7 +189,7 @@ class ModelOrchestrator():
             else:
                 pipe.send(False)
             
-            
+           
             f_savables = cached_task.shard_to_input_dict[shard_key]
             print("SAVE INTERMEDIATES: {}".format(f_savables))
             pipe.send(f_savables) # save items cached on same device
@@ -205,12 +207,13 @@ class ModelOrchestrator():
         print("SENT OFFLOAD INFO")
         
         ret_tensors = pipe.recv()
+        print("MAIN DEVICE: {}".format(next(cached_task.shard_dictionary[shard_key].model.parameters()).device))
         print("RECEIVED TENSORS")
         try:
             if model_shard.direction == "f":
-                model_task.update_task(chosen_shard_index, grad_dict, ret_tensor_dictionary=ret_tensors)
+                model_task.update_task(grad_dict, chosen_shard_index, ret_tensor_dictionary=ret_tensors)
             else:
-                model_task.update_task(chosen_shard_index, grad_dict, ret_grad_dictionary=ret_tensors)
+                model_task.update_task(grad_dict, chosen_shard_index, ret_grad_dictionary=ret_tensors)
 
             if model_task.epochs <= 0:
                 self.tasks.remove(model_task)

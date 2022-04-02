@@ -207,10 +207,15 @@ class ModelTask():
     def update_task(self, grad_dict=None, completed_index=None, ret_tensor_dictionary=None, ret_grad_dictionary=None):
         print("STARTING UPDATE")
         if completed_index is not None:
+            print("COMPLETED INDEX: {}".format(completed_index))
             self.completed_shards.add(completed_index)
             if grad_dict is not None:
+                print("MY GRAD DICT: {}".format(grad_dict))
+                print("UPDATE DEVICE: {}".format(next(self.shard_dictionary[completed_index].model.parameters()).device))
                 for name, param_x in self.shard_dictionary[completed_index].model.named_parameters():
                     print("UPDATING PARAMETER: {}".format(name))
+                    print(param_x.device)
+                    print(grad_dict[name].device)
                     param_x.grad = grad_dict[name]
                 self.shard_dictionary[completed_index].optimizer.step()
             
