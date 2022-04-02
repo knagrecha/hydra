@@ -27,22 +27,113 @@ from datetime import datetime
 import concurrent.futures
 import sys
 import signal
-from torch import multiprocessing
+from torch import multiprocessing as mp
 import traceback
 global_timer = timer()
 thread_lock = threading.Lock()
+
+"""
+
+    TODO:
+        Avoid sending through pipe CPU tensors that are already buffered in a local process (local_saved_x_tensors)
+        Have GenericExecutor only send back relevant tensors, not all of them.
+
+"""
+
+
+
+"""
+
+    Multiprocessed execution that "owns" a particular device. Waits for pipe input then executes and returns.
+    
+    The communication procedure:
+    
+        1. Main process (scheduler) sends out execution details
+        2. Executor sends gradient dictionary (or None). Marks end of execution
+        3. Scheduler send back to the executor two flags, one telling the executor whether or not to offload the model
+           and a second telling it which tensors to offload.
+        4. Executor offloads what it needs to and sends back the tensors.
+    
+"""
+
+def execute_train(device_rank, pipe):
+    local_saved_f_tensors = {} # held-in place during execution. Use the process-local copies.
+    local_saved_b_tensors = {}
+    print("STARTED EXECUTION")
+    while True:
+        # block until inputs received
+        print("WAITING")
+        model_shard = pipe.recv()
+        input_tensors = pipe.recv()
+        grad_tensors = pipe.recv()
+        chosen_shard_index = pipe.recv()
+        
+        input_tensors.update(local_saved_f_tensors)
+        if grad_tensors is not None:
+            grad_tensors.update(local_saved_b_tensors)
+        
+        local_saved_f_tensors = {}
+        local_saved_b_tensors = {}
+
+        print("RECEIVED")
+        returned_tensors = model_shard.run(device_rank, input_tensors, grad_tensors) # run the model
+        
+        # execute
+        if model_shard.direction == "b":
+            grad_dict = {}
+            for key, value in model_shard.model.named_parameters():
+                grad_dict[key] = value.grad.cpu().clone()
+            # send back the data
+            pipe.send(grad_dict)
+        else:
+            pipe.send(None)
+            
+        should_offload = pipe.recv() # should I offload my model?
+        if should_offload:
+            model_shard.model.to("cpu", non_blocking=True)
+            
+        f_save_tensors = pipe.recv() # which forward tensors (if any) should I not offload?
+        b_save_tensors = pipe.recv() # which backward tensors (if any) should I not offload?
+        ret_keys = returned_tensors.keys()
+        for key in ret_keys:
+            if key in f_save_tensors:
+                local_saved_f_tensors[key] = returned_tensors[key]
+            elif key in b_save_tensors:
+                local_saved_b_tensors[key] = returned_tensors[key]
+
+            # Only send back CPU tensors, avoids CUDA sharing errors.    
+            if returned_tensors[key] is not None:
+                returned_tensors[key] = returned_tensors[key].to("cpu", non_blocking=True)
+                
+
+        pipe.send(returned_tensors) # send back the tensors
+
 
 """
     The "orchestrator"/scheduler that assigns ModelTasks for training.
 
 """
 
-
 class ModelOrchestrator():
     def __init__(self, tasks):
+        torch.multiprocessing.set_start_method('spawn', force=True)
         self.all_devices = [ torch.device("cuda:{}".format(idx)) for idx in range(torch.cuda.device_count()) ] # all devices
         self.available_devices = copy.copy(self.all_devices) # "empty" devices
         self.active_devices = [] # currently active devices
+        
+        self.send_pipes = []
+        self.rec_pipes = []
+        for x in range(len(self.all_devices)):
+            parent, child = mp.Pipe()
+            self.send_pipes.append(parent)
+            self.rec_pipes.append(child)
+            
+        print("CREATING PROCESSES")
+        self.mp_processes = [mp.Process(target=execute_train, args=(x, self.rec_pipes[x])) for x in range(len(self.all_devices))]
+        for proc in self.mp_processes:
+            proc.start()
+        print("PROCESSES STARTED")
+        
         self.tasks = copy.copy(tasks) # list of tasks
         self.idle_tasks = copy.copy(tasks) # list of idle tasks
         
@@ -72,55 +163,53 @@ class ModelOrchestrator():
         input tensors, grad tensors (can be None), and an assigned device.
     """
 
-    def train_shard_on_device(self, model_shard, model_task, input_tensors, grad_tensors, chosen_device, chosen_shard_index):
+    def train_shard_on_device(self, pipe, model_shard, model_task, input_tensors, grad_tensors, chosen_shard_index, chosen_device):
+        print("EXECUTION STARTS")
         try:
-            print("EXEC ST {} at {}".format(chosen_shard_index, timer()))
-            returned_tensors = model_shard.run(chosen_device, input_tensors, grad_tensors) # run the model
-            print("EXEC END {} at {}".format(chosen_shard_index, timer()))
-            #end = timer()
-            # if any of the tensors are requested by a cached shard, then do not move them (mark_saved), otherwise
-            # send to CPU
-            
-            
-            ret_keys = returned_tensors.keys()
-            mark_saved = set()
-            if returned_tensors:
-                do_save = False
-                
-                """
-                    TODO: If we run into bugs, maybe restrict this evaluation to self.cached_tasks[chosen_device]
-                
-                """
-                
-                for device, (cached_task, cached_shard, shard_key) in self.cached_tasks.items():
-                    if cached_task == model_task:
-                        if cached_task.shard_dictionary[shard_key].model != model_shard.model:
-                            st = timer()
-                            model_shard.model.to("cpu", non_blocking=True)
-                            end = timer()
-                            print("TIME TAKEN FOR MODEL DEMOTE: {}".format(end-st))
-                        savables = cached_task.shard_to_input_dict[shard_key]
-                        for key in ret_keys:
-                            if key in savables:
-                                mark_saved.add(key)
-                total_st = timer()
-                for key in ret_keys:
-                    if key not in mark_saved:
-                        
-                        if returned_tensors[key] is not None:
-                            st = timer()
-                            returned_tensors[key] = returned_tensors[key].to("cpu", non_blocking=True)
-                            end = timer()
-                            print("TIME TAKEN FOR TENSOR {} DEMOTE: {}".format(key, end-st))
-                total_end = timer()
-                print("TIME TAKEN FOR ALL TENSOR DEMOTE: {}".format(total_end-total_st))
-            
+            pipe.send(model_shard)
+            pipe.send(input_tensors)
+            pipe.send(grad_tensors)
+            pipe.send(chosen_shard_index)
+        except Exception as e:
+            print(e)
 
-            if model_shard.direction == "f":
-                model_task.update_task(chosen_shard_index, ret_tensor_dictionary=returned_tensors)
+        print("SENT TO PIPE")
+        
+        grad_dict = pipe.recv()
+        print("RECEVIED GRAD DICT")
+        
+        cached_task, cached_shard, shard_key = self.cached_tasks[chosen_device]
+        if cached_task == model_task:
+            if cached_task.shard_dictionary[shard_key].model != model_shard.model:
+                pipe.send(True)
             else:
-                model_task.update_task(chosen_shard_index, ret_grad_dictionary=returned_tensors)
+                pipe.send(False)
+            
+            
+            f_savables = cached_task.shard_to_input_dict[shard_key]
+            print("SAVE INTERMEDIATES: {}".format(f_savables))
+            pipe.send(f_savables) # save items cached on same device
+            
+            if cached_shard.direction == "b":
+                b_savables = cached_task.shard_to_output_dict[shard_key]
+                print("SAVE GRADIENTS: {}".format(b_savables))
+                pipe.send(b_savables)
+            else:
+                pipe.send(None)
+
+        else:
+            pipe.send(set()) # don't save any
                 
+        print("SENT OFFLOAD INFO")
+        
+        ret_tensors = pipe.recv()
+        print("RECEIVED TENSORS")
+        try:
+            if model_shard.direction == "f":
+                model_task.update_task(chosen_shard_index, grad_dict, ret_tensor_dictionary=ret_tensors)
+            else:
+                model_task.update_task(chosen_shard_index, grad_dict, ret_grad_dictionary=ret_tensors)
+
             if model_task.epochs <= 0:
                 self.tasks.remove(model_task)
             else:
@@ -128,12 +217,10 @@ class ModelOrchestrator():
 
             self.unlock_device(chosen_device)
             self.active_tasks[chosen_device] = (None, None)
-
             self.sleep_event.set()
-            
         except Exception as e:
-            traceback.print_exc()
             print(e)
+
             
     def lock_device(self, chosen):
         self.active_devices.append(chosen)
@@ -158,8 +245,8 @@ class ModelOrchestrator():
                 chosen_key, chosen_shard = chosen_task.get_shard_blind() # get the first candidate 
                 in_tensors, grad_tensors = chosen_task.get_shard_inputs(chosen_key)
                 self.active_tasks[device] = (chosen_task, chosen_key)
-                self.thread_pool.submit(self.train_shard_on_device, chosen_shard, chosen_task, 
-                                        in_tensors, grad_tensors, device, chosen_key)
+                print("SUBMITTED TO PROCESS {}".format(device.index))
+                self.thread_pool.submit(self.train_shard_on_device, self.send_pipes[device.index], chosen_shard, chosen_task, in_tensors, grad_tensors, chosen_key, device)
 
         for device in self.all_devices:
             # Build initial buffers
@@ -214,8 +301,8 @@ class ModelOrchestrator():
                             self.lock_device(device)
                             self.active_tasks[device] = (cache_task, chosen_key)
                             self.cached_tasks[device] = None, None, None
-                            self.thread_pool.submit(self.train_shard_on_device, chosen_shard, cache_task, 
-                                        in_tensors, grad_tensors, device, chosen_key)
+                            print("SUBMITTED TO PROCESS {}".format(device.index))
+                            self.thread_pool.submit(self.train_shard_on_device, self.send_pipes[device.index], chosen_shard, cache_task, in_tensors, grad_tensors, chosen_key, device)
                     
                     # if no cached task was possible, revert to standard scheduling
                     else:
@@ -229,8 +316,8 @@ class ModelOrchestrator():
                             in_tensors, grad_tensors = chosen_task.get_shard_inputs(chosen_key)
                             self.active_tasks[device] = (chosen_task, chosen_key)
                             candidate_tasks.remove(chosen_task)
-                            self.thread_pool.submit(self.train_shard_on_device, chosen_shard, chosen_task, 
-                                                    in_tensors, grad_tensors, device, chosen_key)
+                            print("SUBMITTED TO PROCESS {}".format(device.index))
+                            self.thread_pool.submit(self.train_shard_on_device, self.send_pipes[device.index], chosen_shard, chosen_task, in_tensors, grad_tensors, chosen_key, device)
 
                         
                     # Replace buffers for this device
@@ -281,8 +368,15 @@ class ModelOrchestrator():
             except KeyboardInterrupt:
                 if thread_lock.locked():
                     thread_lock.release()
+                
+                while len(self.send_pipes) > 0:
+                    del self.send_pipes[0]
+                    del self.rec_pipes[0]
 
-
+                for process in self.mp_processes:
+                    process.terminate()
+                    #process.close()
+                    
                 print ("Caught KeyboardInterrupt, terminating workers")
                 end = timer()
                 print()

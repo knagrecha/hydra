@@ -51,9 +51,9 @@ class ShardTask():
         if self.direction == "f":
             end = timer()
             print("TIME TAKEN FOR PROMOTE: {}".format(end-st))
-
+            st = timer()
             vals = self.model.forward(tensor_dictionary)
-            end = timer()
+
             print("TIME TAKEN FOR EXEC: {}".format(end-st))
         else:
             b_keys = gradient_tensor_dictionary.keys()
@@ -67,6 +67,4 @@ class ShardTask():
             vals = self.model.backward(tensor_dictionary, gradient_tensor_dictionary)
             end = timer()
             print("TIME TAKEN FOR EXEC: {}".format(end-st))
-            self.optimizer.step()
-            self.model.zero_grad()
         return vals

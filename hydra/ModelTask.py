@@ -204,14 +204,26 @@ class ModelTask():
     """
         Updates the ModelTask. Should be called after each shard completion.
     """
-    def update_task(self, completed_index=None, ret_tensor_dictionary=None, ret_grad_dictionary=None):
+    def update_task(self, grad_dict=None, completed_index=None, ret_tensor_dictionary=None, ret_grad_dictionary=None):
+        print("STARTING UPDATE")
         if completed_index is not None:
             self.completed_shards.add(completed_index)
+            if grad_dict is not None:
+                for name, param_x in self.shard_dictionary[completed_index].model.named_parameters():
+                    print("UPDATING PARAMETER: {}".format(name))
+                    param_x.grad = grad_dict[name]
+                self.shard_dictionary[completed_index].optimizer.step()
             
         if ret_tensor_dictionary is not None:
+            # NECESSARY FOR CUDA MULTIPROCESSING IN PYTORCH
+            for k, v in ret_tensor_dictionary.items():
+                ret_tensor_dictionary[k] = v.clone()
+                
             self.tensor_dictionary.update(ret_tensor_dictionary)
             
         if ret_grad_dictionary is not None:
+            for k, v in ret_grad_dictionary.items():
+                ret_tensor_dictionary[k] = v.clone()
             self.grad_dictionary.update(ret_grad_dictionary)
         
         # get shards that are not already executed or primed
@@ -231,6 +243,7 @@ class ModelTask():
         
         if (len(self.completed_shards) == len(self.total_shards)):
             self.get_new_batch()
+        print("UPDATE COMPLETE")
             
             
     """

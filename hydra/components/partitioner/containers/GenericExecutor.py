@@ -52,7 +52,6 @@ class GenericExecutor(nn.Module):
         super(GenericExecutor, self).__init__()
         
         self.layer_dictionary = layer_dictionary
-        self.all_layers = self.layer_dictionary.keys()
         self.requested_outputs = set(requested_outputs) # maps input layers to the layers that receive it
         
         
