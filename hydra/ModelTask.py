@@ -20,6 +20,9 @@ import numpy as np
 from torch import multiprocessing as multiprocessing
 from collections import defaultdict
 import copy
+import datetime
+
+
 
 class ModelTask():
     #def __init__(self, name, model, criterion, dataloader, lr, epochs, global_timer=None, use_scaler=False, partitioner=Pilot()):
@@ -35,6 +38,10 @@ class ModelTask():
         lr: learning rate
         epochs: total epochs to be run   
     """
+    
+    def global_log(self, message=""):
+        now = datetime.datetime.now()
+        print("[{}]\t\t[{}] ".format(now.strftime('%H:%M:%S'), self.name) + message)
     
     
     def __init__(self, name, layer_dictionary, io_dictionary, dataloader, lr, epochs, verbose=0):
@@ -182,7 +189,7 @@ class ModelTask():
         
         completed_mbs = self.total_length - self.minibatches_remaining
         if (completed_mbs % 1 == 0):
-            print("MODEL: {}, EPOCH: {}, MBS: {} / {}".format(self.name, self.total_epochs-self.epochs, completed_mbs, self.total_length))
+            self.global_log("MODEL: {}, EPOCH: {}, MBS: {} / {}".format(self.name, self.total_epochs-self.epochs, completed_mbs, self.total_length))
         
         
         # initialize the tensor dictionary with initial minibatch
@@ -203,33 +210,48 @@ class ModelTask():
             
     """
         Updates the ModelTask. Should be called after each shard completion.
+        TODO: Try and spin this out into its own process later. It's CPU intensive.
     """
     def update_task(self, grad_dict=None, completed_index=None, ret_tensor_dictionary=None, ret_grad_dictionary=None):
-        print("STARTING UPDATE")
+        self.global_log("STARTING UPDATE")
         if completed_index is not None:
-            print("COMPLETED INDEX: {}".format(completed_index))
+            self.global_log("COMPLETED INDEX: {}".format(completed_index))
             self.completed_shards.add(completed_index)
             if grad_dict is not None:
-                print("MY GRAD DICT: {}".format(grad_dict))
-                print("UPDATE DEVICE: {}".format(next(self.shard_dictionary[completed_index].model.parameters()).device))
+
+                
+                self.global_log("UPDATE DEVICE: {}".format(next(self.shard_dictionary[completed_index].model.parameters()).device))
+                
+                
                 for name, param_x in self.shard_dictionary[completed_index].model.named_parameters():
-                    print("UPDATING PARAMETER: {}".format(name))
-                    print(param_x.device)
-                    print(grad_dict[name].device)
+                    self.global_log("UPDATING PARAMETER: {}".format(name))
                     param_x.grad = grad_dict[name]
+                    self.global_log("UPDATED: {}".format(name))
+                    
+                self.global_log("CALLING OPTIMIZER")
                 self.shard_dictionary[completed_index].optimizer.step()
-            
+                self.global_log("OPTIMIZER APPLIED")
+                self.shard_dictionary[completed_index].model.zero_grad()
+                self.global_log("ZERO GRAD'D")
+                
+                
+        """        
+           Ideally eliminate this step when not needed (double buffered), or at least multiprocess it.     
+        """
         if ret_tensor_dictionary is not None:
             # NECESSARY FOR CUDA MULTIPROCESSING IN PYTORCH
             for k, v in ret_tensor_dictionary.items():
                 ret_tensor_dictionary[k] = v.clone()
-                
             self.tensor_dictionary.update(ret_tensor_dictionary)
             
+        
         if ret_grad_dictionary is not None:
+            # NECESSARY FOR CUDA MULTIPROCESSING IN PYTORCH
+            self.global_log("CREATING LOCAL PASSBACK")
             for k, v in ret_grad_dictionary.items():
-                ret_tensor_dictionary[k] = v.clone()
+                ret_grad_dictionary[k] = v.clone()
             self.grad_dictionary.update(ret_grad_dictionary)
+            self.global_log("UPDATED GRADIENT DICTIONARY")
         
         # get shards that are not already executed or primed
         eval_shards = (self.total_shards - self.completed_shards) - self.candidate_shards  - self.blocked_shards
@@ -248,7 +270,7 @@ class ModelTask():
         
         if (len(self.completed_shards) == len(self.total_shards)):
             self.get_new_batch()
-        print("UPDATE COMPLETE")
+        self.global_log("UPDATE COMPLETE")
             
             
     """

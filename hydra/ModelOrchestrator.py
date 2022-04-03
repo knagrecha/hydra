@@ -29,14 +29,17 @@ import sys
 import signal
 from torch import multiprocessing as mp
 import traceback
+import datetime
 global_timer = timer()
 thread_lock = threading.Lock()
+
+
+
 
 """
 
     TODO:
         Avoid sending through pipe CPU tensors that are already buffered in a local process (local_saved_x_tensors)
-        Have GenericExecutor only send back relevant tensors, not all of them.
 
 """
 
@@ -56,14 +59,47 @@ thread_lock = threading.Lock()
     
 """
 
-def execute_train(device_rank, pipe):
+def global_log(message=""):
+    now = datetime.datetime.now()
+    print("[{}]\t\t".format(now.strftime('%H:%M:%S')) + message)
+
+
+def execute_train(device_rank, pipe, db_pipe):
     local_saved_f_tensors = {} # held-in place during execution. Use the process-local copies.
     local_saved_b_tensors = {}
-    print("STARTED EXECUTION")
+    
+    global double_buffered_model_shard
+    global db_lock
+    
+    double_buffered_model_shard = None
+    db_lock = threading.Lock()
+    
+    double_buffering_executor = threading.Thread(target=double_buffer, args=(db_pipe, device_rank))
+    
+    
+    global_log("[PROCESS: {}] STARTED EXECUTION".format(device_rank))
     while True:
         # block until inputs received
-        print("WAITING")
-        model_shard = pipe.recv()
+        global_log("[PROCESS: {}] WAITING".format(device_rank))
+        
+        
+        db_lock.acquire() # so double buffering can ONLY begin during execution.
+        global_log("[PROCESS: {}] DB LOCK ACQUIRED BY MAIN PROCESS".format(device_rank))
+        
+        if not double_buffering_executor.is_alive(): # only true for first pass
+            double_buffering_executor.start()
+            
+            
+        if double_buffered_model_shard is not None:
+            global_log("[PROCESS: {}] RECEIVED DOUBLE BUFFER".format(device_rank))
+            model_shard = double_buffered_model_shard
+            double_buffered_model_shard = None
+        else:
+            global_log("[PROCESS: {}] NO DOUBLE BUFFER AVAILABLE".format(device_rank))
+            model_shard = pipe.recv()
+            
+        db_lock.release()
+            
         input_tensors = pipe.recv()
         grad_tensors = pipe.recv()
         chosen_shard_index = pipe.recv()
@@ -75,7 +111,7 @@ def execute_train(device_rank, pipe):
         local_saved_f_tensors = {}
         local_saved_b_tensors = {}
 
-        print("RECEIVED")
+        global_log("[PROCESS: {}] EXECUTING".format(device_rank))
         returned_tensors = model_shard.run(device_rank, input_tensors, grad_tensors) # run the model
         
         # execute
@@ -88,16 +124,10 @@ def execute_train(device_rank, pipe):
         else:
             pipe.send(None)
             
-        should_offload = pipe.recv() # should I offload my model?
-        if should_offload:
-            print("OFFLOADING MODEL")
-            model_shard.model.cpu()
-            print("OFFLOAD DEVICE: {}".format(next(model_shard.model.parameters()).device))
-            
         f_save_tensors = pipe.recv() # which forward tensors (if any) should I not offload?
         b_save_tensors = pipe.recv() # which backward tensors (if any) should I not offload?
         ret_keys = returned_tensors.keys()
-        print("PRODUCED KEYS: {}".format(ret_keys))
+        global_log("[PROCESS: {}] PRODUCED KEYS: {}".format(device_rank, ret_keys))
         
         for key in ret_keys:
             if key in f_save_tensors:
@@ -109,8 +139,33 @@ def execute_train(device_rank, pipe):
             if returned_tensors[key] is not None:
                 returned_tensors[key] = returned_tensors[key].to("cpu", non_blocking=True)
                 
-
+        global_log("[PROCESS: {}] RETURNING TENSORS".format(device_rank))
         pipe.send(returned_tensors) # send back the tensors
+        
+        
+        
+"""
+
+    Multi-threaded double-buffering. GPU-bound rather than CPU so we don't need multiprocessing for this. 
+
+"""
+
+def double_buffer(db_pipe, device_rank):
+    global double_buffered_model_shard
+    global db_lock
+    
+    while True:
+        global_log("[DOUBLE BUFFER: {}] WAITING FOR DB MODEL".format(device_rank))
+        model_shard = db_pipe.recv()
+        global_log("[DOUBLE BUFFER: {}] RECEIVED DB MODEL".format(device_rank))
+        global_log("[DOUBLE BUFFER: {}] WAITING TO ACQUIRE LOCK".format(device_rank))
+        db_lock.acquire()
+        global_log("[DOUBLE BUFFER: {}] DOUBLE BUFFERING".format(device_rank))
+        model_shard.model = model_shard.model.to("cuda:{}".format(device_rank), non_blocking=True)
+        double_buffered_model_shard = model_shard
+        db_lock.release()
+        
+
 
 
 """
@@ -125,18 +180,33 @@ class ModelOrchestrator():
         self.available_devices = copy.copy(self.all_devices) # "empty" devices
         self.active_devices = [] # currently active devices
         
+        # Data Transfer Pipes
+        
         self.send_pipes = []
         self.rec_pipes = []
+        
+        # Double Buffering Pipes
+        
+        self.db_send_pipes = []
+        self.db_rec_pipes = []
+        
         for x in range(len(self.all_devices)):
             parent, child = mp.Pipe()
             self.send_pipes.append(parent)
             self.rec_pipes.append(child)
             
-        print("CREATING PROCESSES")
-        self.mp_processes = [mp.Process(target=execute_train, args=(x, self.rec_pipes[x])) for x in range(len(self.all_devices))]
+            db_parent, db_child = mp.Pipe()
+            self.db_send_pipes.append(db_parent)
+            self.db_rec_pipes.append(db_child)
+            
+            
+
+            
+        global_log("[MAIN] CREATING PROCESSES")
+        self.mp_processes = [mp.Process(target=execute_train, args=(x, self.rec_pipes[x], self.db_rec_pipes[x])) for x in range(len(self.all_devices))]
         for proc in self.mp_processes:
             proc.start()
-        print("PROCESSES STARTED")
+        global_log("[MAIN] PROCESSES STARTED")
         
         self.tasks = copy.copy(tasks) # list of tasks
         self.idle_tasks = copy.copy(tasks) # list of idle tasks
@@ -156,63 +226,86 @@ class ModelOrchestrator():
     def log(self, message):
         if self.verbose == 1:
             screen_lock.acquire()
-            print(message)
+            global_log(message)
             screen_lock.release()
-
-
-
+            
+            
+            
+            
+            
     """
         Executes training. 
         Receives as input a ShardTask, the ModelTask that owns it, 
         input tensors, grad tensors (can be None), and an assigned device.
     """
 
-    def train_shard_on_device(self, pipe, model_shard, model_task, input_tensors, grad_tensors, chosen_shard_index, chosen_device):
-        print("EXECUTION STARTS")
+    def double_buffer_shard(self, db_pipe, model_shard):
+        global_log("[MAIN] DB STARTS")
         try:
-            pipe.send(model_shard)
+            db_pipe.send(model_shard)
+        except Exception as e:
+            global_log(e)
+
+    """
+        Executes training. 
+        Receives as input a ShardTask, the ModelTask that owns it, 
+        input tensors, grad tensors (can be None), and an assigned device.
+        
+        If model_shard is "None", then take from cache.
+    """
+
+    def train_shard_on_device(self, pipe, model_shard, model_task, input_tensors, grad_tensors, chosen_shard_index, chosen_device):
+        
+        global_log("[MAIN] EXECUTION STARTS")
+        try:
+            if model_shard is not None:
+                pipe.send(model_shard)
             pipe.send(input_tensors)
             pipe.send(grad_tensors)
             pipe.send(chosen_shard_index)
         except Exception as e:
-            print(e)
+            global_log(e)
 
-        print("SENT TO PIPE")
+        global_log("[MAIN] SENT MODEL + DATA TO PIPE")
         
         grad_dict = pipe.recv()
-        print("RECEVIED GRAD DICT")
+        global_log("[MAIN] RECEIVED GRAD DICT")
         
-        cached_task, cached_shard, shard_key = self.cached_tasks[chosen_device]
-        if cached_task == model_task:
-            if cached_task.shard_dictionary[shard_key].model != model_shard.model:
-                pipe.send(True)
-            else:
-                pipe.send(False)
-            
-           
-            f_savables = cached_task.shard_to_input_dict[shard_key]
-            print("SAVE INTERMEDIATES: {}".format(f_savables))
-            pipe.send(f_savables) # save items cached on same device
-            
-            if cached_shard.direction == "b":
-                b_savables = cached_task.shard_to_output_dict[shard_key]
-                print("SAVE GRADIENTS: {}".format(b_savables))
-                pipe.send(b_savables)
-            else:
-                pipe.send(None)
-
-        else:
-            pipe.send(set()) # don't save any
-                
-        print("SENT OFFLOAD INFO")
-        
-        ret_tensors = pipe.recv()
-        print("MAIN DEVICE: {}".format(next(cached_task.shard_dictionary[shard_key].model.parameters()).device))
-        print("RECEIVED TENSORS")
         try:
-            if model_shard.direction == "f":
+            cached_task, cached_shard, shard_key = self.cached_tasks[chosen_device]
+            if cached_task is not None:
+                global_log("[MAIN] CACHE DETAILS: {} {} {}".format(cached_task.name, cached_shard, shard_key))
+                if cached_task == model_task:
+                    global_log("[MAIN] CACHE TASK IS SAME AS MODEL TASK")
+
+                    f_savables = cached_task.shard_to_input_dict[shard_key]
+                    global_log("[MAIN] SAVE INTERMEDIATES: {}".format(f_savables))
+                    pipe.send(f_savables) # save items cached on same device
+
+                    if cached_shard.direction == "b":
+                        b_savables = cached_task.shard_to_output_dict[shard_key]
+                        global_log("[MAIN] SAVE GRADIENTS: {}".format(b_savables))
+                        pipe.send(b_savables)
+                    else:
+                        pipe.send(set())
+
+                else:
+                    pipe.send(set()) # don't save any
+                    pipe.send(set()) # don't save any
+            else:
+                pipe.send(set()) # don't save any
+                pipe.send(set()) # don't save any
+
+            global_log("[MAIN] SENT OFFLOAD INFO")
+            ret_tensors = pipe.recv()
+            global_log("[MAIN] RECEIVED TENSORS")
+
+            direction = model_task.shard_dictionary[chosen_shard_index].direction
+            if direction == "f":
+                global_log("[MAIN] CALLING UPDATE FORWARD")
                 model_task.update_task(grad_dict, chosen_shard_index, ret_tensor_dictionary=ret_tensors)
             else:
+                global_log("[MAIN] CALLING UPDATE BACKWARD")
                 model_task.update_task(grad_dict, chosen_shard_index, ret_grad_dictionary=ret_tensors)
 
             if model_task.epochs <= 0:
@@ -223,8 +316,11 @@ class ModelOrchestrator():
             self.unlock_device(chosen_device)
             self.active_tasks[chosen_device] = (None, None)
             self.sleep_event.set()
+            
+            
+            
         except Exception as e:
-            print(e)
+            global_log(e)
 
             
     def lock_device(self, chosen):
@@ -237,7 +333,8 @@ class ModelOrchestrator():
     
    
     def train_models(self):
-        print("****************************TRAINING STARTS***************************************")
+        global_log("****************************TRAINING STARTS***************************************")
+        
         global thread_lock
         # select initial tasks
         for device in self.all_devices:
@@ -250,9 +347,12 @@ class ModelOrchestrator():
                 chosen_key, chosen_shard = chosen_task.get_shard_blind() # get the first candidate 
                 in_tensors, grad_tensors = chosen_task.get_shard_inputs(chosen_key)
                 self.active_tasks[device] = (chosen_task, chosen_key)
-                print("SUBMITTED TO PROCESS {}".format(device.index))
+                global_log("[MAIN] SUBMITTED TO PROCESS {}".format(device.index))
                 self.thread_pool.submit(self.train_shard_on_device, self.send_pipes[device.index], chosen_shard, chosen_task, in_tensors, grad_tensors, chosen_key, device)
 
+                
+                
+                
         for device in self.all_devices:
             # Build initial buffers
             candidate_tasks = []
@@ -283,7 +383,8 @@ class ModelOrchestrator():
                     chosen_key, chosen_shard = cache_task.get_shard_blind() # get the first candidate 
                     
                 self.cached_tasks[device] = (cache_task, chosen_shard, chosen_key)
-                chosen_shard.model = chosen_shard.model.to(device, non_blocking=True) # Buffer up the model
+                
+                self.double_buffer_shard(self.db_send_pipes[device.index], chosen_shard) # call the double buffer for that process
 
             start = timer()
 
@@ -306,11 +407,14 @@ class ModelOrchestrator():
                             self.lock_device(device)
                             self.active_tasks[device] = (cache_task, chosen_key)
                             self.cached_tasks[device] = None, None, None
-                            print("SUBMITTED TO PROCESS {}".format(device.index))
-                            self.thread_pool.submit(self.train_shard_on_device, self.send_pipes[device.index], chosen_shard, cache_task, in_tensors, grad_tensors, chosen_key, device)
+                            global_log("SUBMITTED TO PROCESS {}".format(device.index))
+                            
+                            
+                            self.thread_pool.submit(self.train_shard_on_device, self.send_pipes[device.index], None, cache_task, in_tensors, grad_tensors, chosen_key, device)
                     
                     # if no cached task was possible, revert to standard scheduling
                     else:
+                        global_log("STANDARD SCHEDULING, NO DOUBLE BUFFER")
                         candidate_tasks = [t for t in self.tasks if len(t.candidate_shards) > 0] # selection candidates
                         if (len(candidate_tasks) > 0):
                             
@@ -321,7 +425,7 @@ class ModelOrchestrator():
                             in_tensors, grad_tensors = chosen_task.get_shard_inputs(chosen_key)
                             self.active_tasks[device] = (chosen_task, chosen_key)
                             candidate_tasks.remove(chosen_task)
-                            print("SUBMITTED TO PROCESS {}".format(device.index))
+                            global_log("[MAIN] SUBMITTED TO PROCESS {}".format(device.index))
                             self.thread_pool.submit(self.train_shard_on_device, self.send_pipes[device.index], chosen_shard, chosen_task, in_tensors, grad_tensors, chosen_key, device)
 
                         
@@ -356,10 +460,10 @@ class ModelOrchestrator():
                             chosen_key, chosen_shard = cache_task.get_shard_blind() # get the first candidate 
                             
                             
-                        #print("DB'ing {} at {}".format(chosen_key, timer()))
+                        #global_log("DB'ing {} at {}".format(chosen_key, timer()))
                         self.cached_tasks[device] = (cache_task, chosen_shard, chosen_key)
-                        chosen_shard.model = chosen_shard.model.to(device, non_blocking=True) # Buffer up the model
-                        
+                        self.double_buffer_shard(self.db_send_pipes[device.index], chosen_shard)
+                        """
                         available_in_tensors, available_grad_tensors = cache_task.get_available_shard_inputs(chosen_key)
                         for t in available_in_tensors:
                             cache_task.tensor_dictionary[t] = cache_task.tensor_dictionary[t].to(device, non_blocking=True)
@@ -367,8 +471,8 @@ class ModelOrchestrator():
                             for t in available_grad_tensors:
                                 if cache_task.grad_dictionary[t] is not None:
                                     cache_task.grad_dictionary[t] = cache_task.grad_dictionary[t].to(device, non_blocking=True)
-                        #print("FINISHED DB'ing at {}".format(timer()))
-     
+                        #global_log("FINISHED DB'ing at {}".format(timer()))
+                        """
 
             except KeyboardInterrupt:
                 if thread_lock.locked():
@@ -382,11 +486,11 @@ class ModelOrchestrator():
                     process.terminate()
                     #process.close()
                     
-                print ("Caught KeyboardInterrupt, terminating workers")
+                global_log ("Caught KeyboardInterrupt, terminating workers")
                 end = timer()
-                print()
-                print()
-                print("TOTAL TIME TAKEN: {}".format(end - start))
+                global_log()
+                global_log()
+                global_log("TOTAL TIME TAKEN: {}".format(end - start))
 
 
                 sys.exit(0)
@@ -394,5 +498,5 @@ class ModelOrchestrator():
             
      
         end = timer()
-        print("TOTAL TIME TAKEN: {}".format(end - start))
+        global_log("TOTAL TIME TAKEN: {}".format(end - start))
         
