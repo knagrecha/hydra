@@ -51,8 +51,6 @@ class ModelOrchestrator():
             i.global_timer = global_timer 
             
         self.active_tasks = {k: (None, None) for k in self.all_devices} # currently active (task, shard) tuple by device
-        # currently cached (task, shard, in_tensors, grad_tensors, key) by 
-        self.cached_tasks = {k: (None, None, None) for k in self.all_devices}
         self.sleep_event = threading.Event()
         self.thread_pool = concurrent.futures.ThreadPoolExecutor()
         self.verbose = 1
@@ -73,68 +71,31 @@ class ModelOrchestrator():
     """
 
     def train_shard_on_device(self, model_shard, model_task, input_tensors, grad_tensors, chosen_device, chosen_shard_index):
-        try:
-            print("EXEC ST {} at {}".format(chosen_shard_index, timer()))
-            returned_tensors = model_shard.run(chosen_device, input_tensors, grad_tensors) # run the model
-            print("EXEC END {} at {}".format(chosen_shard_index, timer()))
-            #end = timer()
-            # if any of the tensors are requested by a cached shard, then do not move them (mark_saved), otherwise
-            # send to CPU
-            
-            
-            ret_keys = returned_tensors.keys()
-            mark_saved = set()
-            if returned_tensors:
-                do_save = False
-                
-                """
-                    TODO: If we run into bugs, maybe restrict this evaluation to self.cached_tasks[chosen_device]
-                
-                """
-                
-                for device, (cached_task, cached_shard, shard_key) in self.cached_tasks.items():
-                    if cached_task == model_task:
-                        if cached_task.shard_dictionary[shard_key].model != model_shard.model:
-                            st = timer()
-                            model_shard.model.to("cpu", non_blocking=True)
-                            end = timer()
-                            print("TIME TAKEN FOR MODEL DEMOTE: {}".format(end-st))
-                        savables = cached_task.shard_to_input_dict[shard_key]
-                        for key in ret_keys:
-                            if key in savables:
-                                mark_saved.add(key)
-                total_st = timer()
-                for key in ret_keys:
-                    if key not in mark_saved:
-                        
-                        if returned_tensors[key] is not None:
-                            st = timer()
-                            returned_tensors[key] = returned_tensors[key].to("cpu", non_blocking=True)
-                            end = timer()
-                            print("TIME TAKEN FOR TENSOR {} DEMOTE: {}".format(key, end-st))
-                total_end = timer()
-                print("TIME TAKEN FOR ALL TENSOR DEMOTE: {}".format(total_end-total_st))
+        returned_tensors = model_shard.run(chosen_device, input_tensors, grad_tensors) # run the model
+        ret_keys = returned_tensors.keys()
+        mark_saved = set()
+        if returned_tensors:
+            do_save = False
+            for key in ret_keys:
+                if returned_tensors[key] is not None:
+                    returned_tensors[key] = returned_tensors[key].to("cpu", non_blocking=True)
+
+        if model_shard.direction == "f":
+            model_task.update_task(chosen_shard_index, ret_tensor_dictionary=returned_tensors)
+        else:
+            model_task.update_task(chosen_shard_index, ret_grad_dictionary=returned_tensors)
+
+        if model_task.epochs <= 0:
+            self.tasks.remove(model_task)
+        else:
+            self.idle_tasks.append(model_task)
+
+        self.unlock_device(chosen_device)
+        self.active_tasks[chosen_device] = (None, None)
+
+        self.sleep_event.set()
             
 
-            if model_shard.direction == "f":
-                model_task.update_task(chosen_shard_index, ret_tensor_dictionary=returned_tensors)
-            else:
-                model_task.update_task(chosen_shard_index, ret_grad_dictionary=returned_tensors)
-                
-            if model_task.epochs <= 0:
-                self.tasks.remove(model_task)
-            else:
-                self.idle_tasks.append(model_task)
-
-            self.unlock_device(chosen_device)
-            self.active_tasks[chosen_device] = (None, None)
-
-            self.sleep_event.set()
-            
-        except Exception as e:
-            traceback.print_exc()
-            print(e)
-            
     def lock_device(self, chosen):
         self.active_devices.append(chosen)
         self.available_devices.remove(chosen)
@@ -147,54 +108,19 @@ class ModelOrchestrator():
     def train_models(self):
         print("****************************TRAINING STARTS***************************************")
         global thread_lock
-        # select initial tasks
-        for device in self.all_devices:
+        for device in self.available_devices:
             candidate_tasks = [t for t in self.tasks if len(t.candidate_shards) > 0] # selection candidates
-            if len(candidate_tasks) > 0:
+            if (len(candidate_tasks) > 0):
+
                 task_times = [(i.mini_batch_time * i.minibatches_remaining) + (i.mini_batch_time * i.total_length * i.epochs) for i in candidate_tasks]
                 chosen_task = candidate_tasks[np.argmax(task_times)]
                 self.lock_device(device)
-                # TODO: Introduce some kind of actual selection process
                 chosen_key, chosen_shard = chosen_task.get_shard_blind() # get the first candidate 
                 in_tensors, grad_tensors = chosen_task.get_shard_inputs(chosen_key)
                 self.active_tasks[device] = (chosen_task, chosen_key)
+                candidate_tasks.remove(chosen_task)
                 self.thread_pool.submit(self.train_shard_on_device, chosen_shard, chosen_task, 
                                         in_tensors, grad_tensors, device, chosen_key)
-
-        for device in self.all_devices:
-            # Build initial buffers
-            candidate_tasks = []
-            active_task_specific_shard_pool = None # shards of same task that will be valid after current shard
-            for t in self.tasks:
-                if t == self.active_tasks[device][0]:
-                    active_task_specific_shard_pool = t.get_expected_update(self.active_tasks[device][1])
-                    if len(active_task_specific_shard_pool) > 0:
-                        candidate_tasks.append(t) # selection candidates
-                else:
-                    if len(t.candidate_shards) > 0:
-                        candidate_tasks.append(t) # selection candidates
-
-            lrt = -1 # Sharded-LRTF selection - start by calculating LRT
-            cache_task = None
-            for candidate in candidate_tasks:
-                task_time = ((candidate.mini_batch_time * candidate.minibatches_remaining) + 
-                                 (candidate.mini_batch_time * candidate.total_length * candidate.epochs))
-                if task_time > lrt:
-                    lrt = task_time
-                    cache_task = candidate
-
-            if cache_task is not None:
-                if cache_task == self.active_tasks[device][0]:
-                    chosen_key = active_task_specific_shard_pool.pop()
-                    chosen_shard = cache_task.get_shard(chosen_key)
-                else:
-                    chosen_key, chosen_shard = cache_task.get_shard_blind() # get the first candidate 
-                    
-                self.cached_tasks[device] = (cache_task, chosen_shard, chosen_key)
-                chosen_shard.model = chosen_shard.model.to(device, non_blocking=True) # Buffer up the model
-
-            start = timer()
-
         while len(self.tasks) > 0:
 
             try:
@@ -205,78 +131,18 @@ class ModelOrchestrator():
                     break
                 # for each free device
                 for device in self.available_devices:
-                    # trigger buffered tasks if available
-                    cache_task, chosen_shard, chosen_key = self.cached_tasks[device]
-                    if cache_task is not None:
-                        in_tensors, grad_tensors = cache_task.get_shard_inputs(chosen_key)
-                        if cache_task is not None:
-                            self.idle_tasks.remove(cache_task)
-                            self.lock_device(device)
-                            self.active_tasks[device] = (cache_task, chosen_key)
-                            self.cached_tasks[device] = None, None, None
-                            self.thread_pool.submit(self.train_shard_on_device, chosen_shard, cache_task, 
-                                        in_tensors, grad_tensors, device, chosen_key)
-                    
-                    # if no cached task was possible, revert to standard scheduling
-                    else:
-                        candidate_tasks = [t for t in self.tasks if len(t.candidate_shards) > 0] # selection candidates
-                        if (len(candidate_tasks) > 0):
-                            
-                            task_times = [(i.mini_batch_time * i.minibatches_remaining) + (i.mini_batch_time * i.total_length * i.epochs) for i in candidate_tasks]
-                            chosen_task = candidate_tasks[np.argmax(task_times)]
-                            self.lock_device(device)
-                            chosen_key, chosen_shard = chosen_task.get_shard_blind() # get the first candidate 
-                            in_tensors, grad_tensors = chosen_task.get_shard_inputs(chosen_key)
-                            self.active_tasks[device] = (chosen_task, chosen_key)
-                            candidate_tasks.remove(chosen_task)
-                            self.thread_pool.submit(self.train_shard_on_device, chosen_shard, chosen_task, 
-                                                    in_tensors, grad_tensors, device, chosen_key)
+                    candidate_tasks = [t for t in self.tasks if len(t.candidate_shards) > 0] # selection candidates
+                    if (len(candidate_tasks) > 0):
 
-                        
-                    # Replace buffers for this device
-                    candidate_tasks = []
-                    active_task_specific_shard_pool = None # shards of same task that will be valid after current shard
-                    for t in self.tasks:
-                        if t == self.active_tasks[device][0]:
-                            active_task_specific_shard_pool = t.get_expected_update(self.active_tasks[device][1])
-                           
-                            if len(active_task_specific_shard_pool) > 0:
-                                candidate_tasks.append(t) # selection candidates
-                        else:
-                            if len(t.candidate_shards) > 0:
-                                candidate_tasks.append(t) # selection candidates
-                                
-                    lrt = -1 # Sharded-LRTF selection - start by calculating LRT
-                    cache_task = None
-                    for candidate in candidate_tasks:
-                        task_time = ((candidate.mini_batch_time * candidate.minibatches_remaining) + 
-                                         (candidate.mini_batch_time * candidate.total_length * candidate.epochs))
-                        if task_time > lrt:
-                            lrt = task_time
-                            cache_task = candidate
-
-                    if cache_task is not None:
-                        # if caching from same model
-                        if cache_task == self.active_tasks[device][0]:
-                            chosen_key = active_task_specific_shard_pool.pop()
-                            chosen_shard = cache_task.get_shard(chosen_key)
-                        else:
-                            chosen_key, chosen_shard = cache_task.get_shard_blind() # get the first candidate 
-                            
-                            
-                        #print("DB'ing {} at {}".format(chosen_key, timer()))
-                        self.cached_tasks[device] = (cache_task, chosen_shard, chosen_key)
-                        chosen_shard.model = chosen_shard.model.to(device, non_blocking=True) # Buffer up the model
-                        
-                        available_in_tensors, available_grad_tensors = cache_task.get_available_shard_inputs(chosen_key)
-                        for t in available_in_tensors:
-                            cache_task.tensor_dictionary[t] = cache_task.tensor_dictionary[t].to(device, non_blocking=True)
-                        if available_grad_tensors is not None:
-                            for t in available_grad_tensors:
-                                if cache_task.grad_dictionary[t] is not None:
-                                    cache_task.grad_dictionary[t] = cache_task.grad_dictionary[t].to(device, non_blocking=True)
-                        #print("FINISHED DB'ing at {}".format(timer()))
-     
+                        task_times = [(i.mini_batch_time * i.minibatches_remaining) + (i.mini_batch_time * i.total_length * i.epochs) for i in candidate_tasks]
+                        chosen_task = candidate_tasks[np.argmax(task_times)]
+                        self.lock_device(device)
+                        chosen_key, chosen_shard = chosen_task.get_shard_blind() # get the first candidate 
+                        in_tensors, grad_tensors = chosen_task.get_shard_inputs(chosen_key)
+                        self.active_tasks[device] = (chosen_task, chosen_key)
+                        candidate_tasks.remove(chosen_task)
+                        self.thread_pool.submit(self.train_shard_on_device, chosen_shard, chosen_task, 
+                                                in_tensors, grad_tensors, device, chosen_key)
 
             except KeyboardInterrupt:
                 if thread_lock.locked():

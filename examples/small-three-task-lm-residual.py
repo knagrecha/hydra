@@ -114,14 +114,14 @@ def get_data_loader(b_size, train=True):
 def get_model(name, layer_count):
     layer_dictionary = {}
     layer_dictionary[0] = custom.BertEmbedding(28783, 1024, transpose=False)
-    for i in range(1, layer_count+1):
+    for i in range(1, layer_count-5):
         layer_dictionary[i] = custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5)
     
-    layer_dictionary[layer_count+1] = torch.nn.Linear(1024, 1024)
-    layer_dictionary[layer_count+2] = torch.nn.GELU()
-    layer_dictionary[layer_count+3] = torch.nn.LayerNorm(1024, eps=1e-12)
-    layer_dictionary[layer_count+4] = torch.nn.Linear(1024, 28783)
-    layer_dictionary[layer_count+5] = pretraining_loss
+    layer_dictionary[layer_count-5] = torch.nn.Linear(1024, 1024)
+    layer_dictionary[layer_count-4] = torch.nn.GELU()
+    layer_dictionary[layer_count-3] = torch.nn.LayerNorm(1024, eps=1e-12)
+    layer_dictionary[layer_count-2] = torch.nn.Linear(1024, 28783)
+    layer_dictionary[layer_count-1] = pretraining_loss
 
     io_dictionary = {}
     for i in range(len(layer_dictionary)):
@@ -147,7 +147,7 @@ def get_model(name, layer_count):
     while not excess:
         local_dictionary = {}
         local_input = {}
-        for i in range(36):
+        for i in range(24):
             if i == 0:
                 f_shard_input.append(io_dictionary[curr_layer])
                 b_shard_input.append(io_dictionary[curr_layer])
@@ -222,7 +222,7 @@ def main():
     device_count = torch.cuda.device_count()
 
     model_0 = get_model("Model_0", 48)
-    
+
     """
     print("RUNTIME COMPARISON")
     for model in [model_0]:
