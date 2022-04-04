@@ -29,20 +29,13 @@ import copy
 
 
 def update_shared_parameters(base_model, queue):
-    
-    print("SETTING UP BASE OPTIMIZERS")
     local_optimizers = {k: torch.optim.SGD(base_model[k].model.parameters(), lr=0.0001) for k in base_model.keys()}
-    print("DONE SETTING UP BASE OPTIMIZERS")
     while True:
-        print("\n\n\n\n\nWAITING\n\n\n\n\n")
         shard_key = queue.get(block=True)
         state_dict = queue.get(block=True)
-        print("RECEIVED!")
         for name, param_x in base_model[shard_key].model.named_parameters():
-            print("UPDATING: {}".format(name))
             param_x.grad = state_dict[name].cpu().clone()
 
-        print("GRADS APPLIED")
         
         for name, param_x in base_model[shard_key].model.named_parameters():
             print(param_x.grad)
@@ -50,10 +43,10 @@ def update_shared_parameters(base_model, queue):
             local_optimizers[shard_key].step()
         except Exception as e:
             print(e)
-        print("ONE PASS DONE")
+
         del state_dict
         del shard_key
-        print("CLEANED UP TOO!")
+
 
 class ModelTask():
     #def __init__(self, name, model, criterion, dataloader, lr, epochs, global_timer=None, use_scaler=False, partitioner=Pilot()):
