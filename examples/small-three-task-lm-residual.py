@@ -66,6 +66,7 @@ def pretraining_loss(out, lm_mask, labels):
     loss_computer = torch.nn.CrossEntropyLoss()
     out = out.view(-1, 28783)
     x = loss_computer(out, labels)
+    print(x.item())
     return x
 
 

@@ -41,20 +41,27 @@ class ShardTask():
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr = self.lr)
         
     def copy(self):
+        #print("COPYING SELF")
         return ShardTask(copy.deepcopy(self.model), self.direction, self.lr)
 
     def run(self, device, tensor_dictionary, gradient_tensor_dictionary=None):
+        
         self.model.to(device, non_blocking=True)
         for key, value in tensor_dictionary.items():
             tensor_dictionary[key] = value.to(device, non_blocking=True)
         
         if self.direction == "f":
+            st = timer()
             vals = self.model.forward(tensor_dictionary)
+            end = timer()
+            print("Time taken: {}".format(end-st))
         else:
             b_keys = gradient_tensor_dictionary.keys()
             for key in b_keys:
                 if gradient_tensor_dictionary[key] is not None:
                     gradient_tensor_dictionary[key] = gradient_tensor_dictionary[key].to(device, non_blocking=True)
+            st = timer()
             vals = self.model.backward(tensor_dictionary, gradient_tensor_dictionary)
-
+            end = timer()
+            print("Time taken: {}".format(end-st))
         return vals

@@ -19,6 +19,7 @@ from hydra.utilities import get_free_space
 import random
 import numpy as np
 from torch import multiprocessing as mp
+import threading
 from collections import defaultdict
 import copy
 
@@ -28,25 +29,25 @@ import copy
 
 
 
-def update_shared_parameters(base_model, queue):
+def update_shared_parameters(base_model, pipe):
+    
     local_optimizers = {k: torch.optim.SGD(base_model[k].model.parameters(), lr=0.0001) for k in base_model.keys()}
     while True:
-        shard_key = queue.get(block=True)
-        state_dict = queue.get(block=True)
-        for name, param_x in base_model[shard_key].model.named_parameters():
-            param_x.grad = state_dict[name].cpu().clone()
-
-        
-        for name, param_x in base_model[shard_key].model.named_parameters():
-            print(param_x.grad)
-        try:
+        dp_instance = pipe.recv()
+        shard_key = pipe.recv()
+        grad_dict = pipe.recv()
+        #print("SHARD {} UPDATE STARTED".format(shard_key))
+        if grad_dict is not None:
+            for name, param_x in base_model[shard_key].model.named_parameters():
+                param_x.grad = grad_dict[name]
             local_optimizers[shard_key].step()
-        except Exception as e:
-            print(e)
-
-        del state_dict
-        del shard_key
-
+            del grad_dict
+        base_model[shard_key].model.zero_grad()
+        new_shard = base_model[shard_key].copy()
+        pipe.send(new_shard)
+        pipe.send(shard_key)
+        pipe.send(dp_instance)
+        
 
 class ModelTask():
     #def __init__(self, name, model, criterion, dataloader, lr, epochs, global_timer=None, use_scaler=False, partitioner=Pilot()):
@@ -68,6 +69,7 @@ class ModelTask():
         
         
         self.data_parallel_degree = 2
+        mp.set_start_method('spawn', force=True)
 
         """
             Understanding arbitrary model execution requires a "mapping" of inputs and outputs in the model.
@@ -90,7 +92,7 @@ class ModelTask():
         self.layer_dictionary = layer_dictionary
         self.layer_to_input_dict = io_dictionary
         
-        self.mp_queue = mp.Queue()
+        
         
         self.layer_to_output_dict = defaultdict(list)
         
@@ -154,6 +156,7 @@ class ModelTask():
         self.dp_candidate_shards = [set() for x in range(self.data_parallel_degree)]
         self.dp_blocked_shards = [set() for x in range(self.data_parallel_degree)]
         self.dp_completed_shards = [set() for x in range(self.data_parallel_degree)]
+        self.dp_multithreading_events = []
         
         
         self.global_timer = 0 # used to identify running times
@@ -181,6 +184,17 @@ class ModelTask():
         
         self.blocked_devices = []
         
+        self.mp_parent, self.mp_child = mp.Pipe()
+        
+    def listen_to_pipe(self, pipe):
+        while True:
+            model = pipe.recv()
+            key = pipe.recv()
+            dp_instance = pipe.recv()
+            self.dp_shard_dictionary[dp_instance][key] = model
+            self.dp_multithreading_events[dp_instance][key].set()
+            #print("SHARD {} UPDATE FINISHED".format(key))
+        
     def setup(self, buffer=None, shard_dictionary=None, shard_to_input_dict=None, shard_to_output_dict=None, mini_batch_time=None):
         
         
@@ -197,9 +211,13 @@ class ModelTask():
             """
 
             for d in range(self.data_parallel_degree):
-                print("CREATING DP INSTANCE: {}".format(d))
+                #print("CREATING DP INSTANCE: {}".format(d))
                 new_sh_dict = {k: task.copy() for k, task in shard_dictionary.items()}
+                new_sh_event_dict = {k: threading.Event() for k in shard_dictionary.keys()}
+                for k in new_sh_event_dict.keys():
+                    new_sh_event_dict[k].set()
                 self.dp_shard_dictionary.append(new_sh_dict)
+                self.dp_multithreading_events.append(new_sh_event_dict)
    
         else:
             # generate shards and expected minibatch runtime
@@ -210,17 +228,15 @@ class ModelTask():
                                                                             self.lr, 
                                                                             self.verbose
                                                                             )
-        
-        
-        
-        print("SHARING MODEL MEMORY")
-        for key, shard in self.shard_dictionary.items():
-            shard.model = shard.model.cpu()
-            shard.model.share_memory()
+
             
-        print("CREATING EXECUTION PROCESS")
-        self.base_model_process = mp.Process(target=update_shared_parameters, args=(self.shard_dictionary, self.mp_queue))
+        #print("CREATING PARAMETER UPDATE PROCESS")
+        self.base_model_process = mp.Process(target=update_shared_parameters, args=(self.shard_dictionary, self.mp_child))
         self.base_model_process.start()
+        
+        #print("CREATING LISTENER PROCESS")
+        self.listener = threading.Thread(target=self.listen_to_pipe, args=(self.mp_parent, ))
+        self.listener.start()
             
         self.total_shards = self.shard_dictionary.keys() # which shards to run overall
             
@@ -290,27 +306,32 @@ class ModelTask():
         else:
             self.dp_tensor_dictionary[dp_instance]["label_0"] = label 
         
+        
+        
+        # Wait for all parameter updates in this batch to finish
+        st = timer()
+        for key, value in self.dp_multithreading_events[dp_instance].items():
+            value.wait()
+        end = timer()
+        print("SPENT {} on sync".format(end-st))
         self.update_task(dp_instance)
         
             
     """
         Updates the ModelTask. Should be called after each shard completion.
     """
-    def update_task(self, dp_instance, completed_index=None, ret_tensor_dictionary=None, ret_grad_dictionary=None):
-
+    def update_task(self, dp_instance, grad_dict=None, completed_index=None, ret_tensor_dictionary=None, ret_grad_dictionary=None):
         
-
+        #print("UPDATE TASK STARTED")
         if completed_index is not None:
-            if self.shard_dictionary[completed_index].direction == "b":
-                grad_dict = {}
-                for key, value in self.dp_shard_dictionary[dp_instance][completed_index].model.named_parameters():
-                    grad_dict[key] = value.grad.cpu().clone()
-                self.mp_queue.put(completed_index)
-                self.mp_queue.put(grad_dict)
-                self.dp_shard_dictionary[dp_instance][completed_index].model.zero_grad()
-                
+            #print("SENDING TO MP")
+            self.mp_parent.send(dp_instance)
+            self.mp_parent.send(completed_index)
+            self.mp_parent.send(grad_dict)
+
             self.dp_completed_shards[dp_instance].add(completed_index)
             
+        #print("CONTINUING TO EXECUTE NORMALLY")
         if ret_tensor_dictionary is not None:
             self.dp_tensor_dictionary[dp_instance].update(ret_tensor_dictionary)
             
@@ -325,92 +346,32 @@ class ModelTask():
             if self.shard_dictionary[shard].direction == "f":
                 req_tensors = self.shard_to_input_dict[shard]
                 if all(req in self.dp_tensor_dictionary[dp_instance] for req in req_tensors):
-                    self.dp_candidate_shards[dp_instance].add(shard)
+                    if self.dp_multithreading_events[dp_instance][shard].is_set():
+                        self.dp_candidate_shards[dp_instance].add(shard)
             else:
                 greq_tensors = self.shard_to_output_dict[shard]
                 req_tensors = self.shard_to_input_dict[shard]
                 if all(req in self.dp_tensor_dictionary[dp_instance] and greq in self.dp_grad_dictionary[dp_instance] for req, greq in zip(req_tensors, greq_tensors)):
                     self.dp_candidate_shards[dp_instance].add(shard)
-        
-        
-        print("TASK {} DP INSTANCE {} OUTPUTS UPDATED ON COMPLETION OF {}".format(self.name, dp_instance, completed_index))
-        
+
         if (len(self.dp_completed_shards[dp_instance]) == len(self.total_shards)):
             self.get_new_batch(dp_instance)
+        
+        #print("FINISHED UPDATE")
             
             
-    """
-        "Planned" candidates after shard key completes. Doesn't affect any class variables.
-    """
-    def get_expected_update(self, key, dp_instance):
-        
-        gen_shard = self.shard_dictionary[key]
-        f_expected_total, b_expected_total = set(self.dp_tensor_dictionary[dp_instance].keys()), set(self.dp_grad_dictionary[dp_instance].keys())
-        
-        if gen_shard.direction == "f":
-            expected_outs = self.shard_to_output_dict[key] # the intermediates the active shard will spit out
-            f_expected_total.update(expected_outs)
-        else:
-            expected_outs = self.shard_to_input_dict[key] # the gradients the active shard will spit out
-            b_expected_total.update(expected_outs)
-            
-        # Non-candidate shards that need to be evaluated for inclusion
-        eval_shards = (self.total_shards - self.dp_completed_shards[dp_instance]) - self.dp_candidate_shards[dp_instance]  - self.dp_blocked_shards[dp_instance]
-            
-        possibles = copy.copy(self.dp_candidate_shards[dp_instance])
-        
-        
-        for shard in eval_shards:
-            if self.shard_dictionary[shard].direction == "f":
-                req_tensors = self.shard_to_input_dict[shard] # for this shard to run we need xyz
-                if all(req in f_expected_total for req in req_tensors):
-                    possibles.add(shard)
-            else:
-                greq_tensors = self.shard_to_output_dict[shard] # for this shard to run we need xyz
-                req_tensors = self.shard_to_input_dict[shard]
-                if all(req in f_expected_total and greq in b_expected_total for req, greq in zip(req_tensors, greq_tensors)):
-                    possibles.add(shard)
-                    
-        return possibles
-    
-    
-    """
-        Will be called for buffering. Blacklists this shard from being selected in future scheduling until minibatch
-        finishes.
-    """
-    
-    def get_shard(self, key, dp_instance):
-        self.dp_blocked_shards[dp_instance].add(key)
-        self.dp_candidate_shards[dp_instance].discard(key)
-        shard_task = self.dp_shard_dictionary[dp_instance][key]
-        return shard_task
-    
+
     def get_shard_blind_from_dp(self, dp_instance):
         key = self.dp_candidate_shards[dp_instance].pop()
         self.dp_blocked_shards[dp_instance].add(key)
         shard_task = self.dp_shard_dictionary[dp_instance][key]
-        
+        self.dp_multithreading_events[dp_instance][key].clear()
         return key, shard_task
-    
 
-    
-    def get_available_shard_inputs(self, key, dp_instance):
-        shard_task = self.shard_dictionary[key]
-        tensor_requests = self.shard_to_input_dict[key]
-        
-        input_tensors = [k for k in tensor_requests if k in self.dp_tensor_dictionary[dp_instance]]
-        if shard_task.direction == "b":
-            grad_requests = self.shard_to_output_dict[key]
-            grad_tensors = [k for k in grad_requests if k in self.dp_grad_dictionary[dp_instance]]
-        else:
-            grad_tensors = None
-        return input_tensors, grad_tensors
     
     def get_shard_inputs(self, key, dp_instance):
         shard_task = self.shard_dictionary[key]
         tensor_requests = self.shard_to_input_dict[key]
-        print("SEARCHING FOR INPUTS FOR SHARD {} DP INSTANCE {}".format(key, dp_instance))
-        print("AVAILABLE TENSORS: {}".format(self.dp_tensor_dictionary[dp_instance].keys()))
         input_tensors = {k: self.dp_tensor_dictionary[dp_instance][k] for k in tensor_requests}
         if shard_task.direction == "b":
             grad_requests = self.shard_to_output_dict[key]

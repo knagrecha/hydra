@@ -77,25 +77,32 @@ class ModelOrchestrator():
 
     def train_shard_on_device(self, model_shard, model_task, input_tensors, grad_tensors, chosen_device, chosen_shard_index, chosen_dp_instance):
        
+        #print("RUNNING")
         returned_tensors = model_shard.run(chosen_device, input_tensors, grad_tensors) # run the model
-        #end = timer()
-        # if any of the tensors are requested by a cached shard, then do not move them (mark_saved), otherwise
-        # send to CPU
-
-        model_shard.model.to("cpu", non_blocking=True)
+        
+        # get the gradients, delete the model
+        if model_shard.direction == "b":
+            grad_dict = {}
+            for key, value in model_shard.model.named_parameters():
+                grad_dict[key] = value.grad.cpu()
+        else:
+            grad_dict = None
+        
+        model_shard.model = None
+        
+        #print("DELETED MODEL")
         if returned_tensors:
             ret_keys = returned_tensors.keys()
             do_save = False
             for key in ret_keys:
                 if returned_tensors[key] is not None:
                     returned_tensors[key] = returned_tensors[key].to("cpu", non_blocking=True)
-
-
-
+    
+        #print("CALLING UPDATE")
         if model_shard.direction == "f":
-            model_task.update_task(chosen_dp_instance, chosen_shard_index, ret_tensor_dictionary=returned_tensors)
+            model_task.update_task(chosen_dp_instance, grad_dict, chosen_shard_index, ret_tensor_dictionary=returned_tensors)
         else:
-            model_task.update_task(chosen_dp_instance, chosen_shard_index, ret_grad_dictionary=returned_tensors)
+            model_task.update_task(chosen_dp_instance, grad_dict, chosen_shard_index, ret_grad_dictionary=returned_tensors)
 
         if model_task.epochs <= 0:
             self.tasks.remove(model_task)
@@ -104,14 +111,15 @@ class ModelOrchestrator():
 
         self.unlock_device(chosen_device)
         self.active_tasks[chosen_device] = (None, None, None)
+        self.sleep_event.set()
 
     def lock_device(self, chosen):
-        print("LOCKING {}".format(chosen))
+        #print("LOCKING {}".format(chosen))
         self.active_devices.append(chosen)
         self.available_devices.remove(chosen)
     
     def unlock_device(self, chosen):
-        print("UNLOCKING {}".format(chosen))
+        #print("UNLOCKING {}".format(chosen))
         self.active_devices.remove(chosen)
         self.available_devices.append(chosen)
     
@@ -128,9 +136,10 @@ class ModelOrchestrator():
                 for d in range(t.data_parallel_degree):
                     if len(t.dp_candidate_shards[d]) > 0:
                         candidate_tasks.append((t, d))
-
+                        
             if len(candidate_tasks) > 0:
                 task_times = [(i.mini_batch_time * i.minibatches_remaining) + (i.mini_batch_time * i.total_length * i.epochs) for i, j in candidate_tasks]
+                #print("CANDIDATES: {}".format(candidate_tasks))
                 chosen_task, chosen_dp = candidate_tasks[np.argmax(task_times)]
                 self.lock_device(device)
                 
@@ -144,7 +153,7 @@ class ModelOrchestrator():
                 in_tensors, grad_tensors = chosen_task.get_shard_inputs(chosen_key, chosen_dp)
                 
                 self.active_tasks[device] = (chosen_task, chosen_key, chosen_dp)
-                print("EXECUTING TASK {} SHARD {} DP {}".format(chosen_task.name, chosen_key, chosen_dp))
+                #print("EXECUTING TASK {} SHARD {} DP {}".format(chosen_task.name, chosen_key, chosen_dp))
                 self.thread_pool.submit(self.train_shard_on_device, chosen_shard, chosen_task, 
                                         in_tensors, grad_tensors, device, chosen_key, chosen_dp)
 
@@ -172,7 +181,7 @@ class ModelOrchestrator():
                     if (len(candidate_tasks) > 0):
 
                         task_times = [(i.mini_batch_time * i.minibatches_remaining) + (i.mini_batch_time * i.total_length * i.epochs) for i, j in candidate_tasks]
-
+                        #print("CANDIDATES: {}".format(candidate_tasks))
                         chosen_task, chosen_dp = candidate_tasks[np.argmax(task_times)]
                         self.lock_device(device)
                         chosen_key, chosen_shard = chosen_task.get_shard_blind_from_dp(chosen_dp) # get the first candidate 
