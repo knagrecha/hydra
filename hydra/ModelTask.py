@@ -22,32 +22,53 @@ from torch import multiprocessing as mp
 import threading
 from collections import defaultdict
 import copy
+from datetime import datetime
 
 
+def log(msg):
+    print("[{}]\t\t".format(datetime.now()) + msg)
 
 
+"""
 
-
-
-def update_shared_parameters(base_model, pipe):
+    The "host" process for each shard. You can make two possible requests to the host - push or pull.
+"""
+    
+def access_host(base_model, pipe):
     
     local_optimizers = {k: torch.optim.SGD(base_model[k].model.parameters(), lr=0.0001) for k in base_model.keys()}
     while True:
-        dp_instance = pipe.recv()
-        shard_key = pipe.recv()
-        grad_dict = pipe.recv()
-        #print("SHARD {} UPDATE STARTED".format(shard_key))
-        if grad_dict is not None:
-            for name, param_x in base_model[shard_key].model.named_parameters():
-                param_x.grad = grad_dict[name]
-            local_optimizers[shard_key].step()
-            del grad_dict
-        base_model[shard_key].model.zero_grad()
-        new_shard = base_model[shard_key].copy()
-        pipe.send(new_shard)
-        pipe.send(shard_key)
-        pipe.send(dp_instance)
+        push = pipe.recv()
+        # push mode (i.e. update base parameters)
+        if push:
+            dp_instance = pipe.recv()
+            shard_key = pipe.recv()
+            grad_dict = pipe.recv()
+            log("SHARD {} UPDATE STARTED".format(shard_key))
+            st = timer()
+            if grad_dict is not None:
+                for name, param_x in base_model[shard_key].model.named_parameters():
+                    param_x.grad = grad_dict[name]
+                local_optimizers[shard_key].step()
+                del grad_dict
+                base_model[shard_key].model.zero_grad()
+            end = timer()
+
+            log("PARAMETER UPDATE TOOK: {}".format(end-st))
         
+        # pull mode (i.e. give me base parameters)
+        else:
+            dp_instance = pipe.recv()
+            shard_key = pipe.recv()
+            st = timer()
+            new_shard = base_model[shard_key].copy()
+            end = timer()
+            log("MODEL COPY TOOK: {}".format(end-st))
+            pipe.send(new_shard)
+            pipe.send(shard_key)
+            pipe.send(dp_instance)
+
+            log("RETURNED MODEL COPY OF {}".format(shard_key))
 
 class ModelTask():
     #def __init__(self, name, model, criterion, dataloader, lr, epochs, global_timer=None, use_scaler=False, partitioner=Pilot()):
@@ -149,14 +170,13 @@ class ModelTask():
             DP Clones
         
         """
-        
+        self.dp_buffered_shard_dictionary = []
         self.dp_shard_dictionary = []
         self.dp_tensor_dictionary = [{} for x in range(self.data_parallel_degree)]
         self.dp_grad_dictionary = [{} for x in range(self.data_parallel_degree)]
         self.dp_candidate_shards = [set() for x in range(self.data_parallel_degree)]
         self.dp_blocked_shards = [set() for x in range(self.data_parallel_degree)]
         self.dp_completed_shards = [set() for x in range(self.data_parallel_degree)]
-        self.dp_multithreading_events = []
         
         
         self.global_timer = 0 # used to identify running times
@@ -186,14 +206,17 @@ class ModelTask():
         
         self.mp_parent, self.mp_child = mp.Pipe()
         
+    # "listener" in main process who receives the results of pull requests
     def listen_to_pipe(self, pipe):
         while True:
             model = pipe.recv()
             key = pipe.recv()
             dp_instance = pipe.recv()
-            self.dp_shard_dictionary[dp_instance][key] = model
-            self.dp_multithreading_events[dp_instance][key].set()
-            #print("SHARD {} UPDATE FINISHED".format(key))
+            log("RECEIVED AT TIME: {}".format(timer()))
+            self.dp_buffered_shard_dictionary[dp_instance][key] = model
+            #log("SHARD {} UPDATE FINISHED".format(key))
+            
+            
         
     def setup(self, buffer=None, shard_dictionary=None, shard_to_input_dict=None, shard_to_output_dict=None, mini_batch_time=None):
         
@@ -211,13 +234,11 @@ class ModelTask():
             """
 
             for d in range(self.data_parallel_degree):
-                #print("CREATING DP INSTANCE: {}".format(d))
+                #log("CREATING DP INSTANCE: {}".format(d))
                 new_sh_dict = {k: task.copy() for k, task in shard_dictionary.items()}
-                new_sh_event_dict = {k: threading.Event() for k in shard_dictionary.keys()}
-                for k in new_sh_event_dict.keys():
-                    new_sh_event_dict[k].set()
+                buffered_sh_dict = {k: task.copy() for k, task in shard_dictionary.items()}
                 self.dp_shard_dictionary.append(new_sh_dict)
-                self.dp_multithreading_events.append(new_sh_event_dict)
+                self.dp_buffered_shard_dictionary.append(buffered_sh_dict)
    
         else:
             # generate shards and expected minibatch runtime
@@ -230,11 +251,11 @@ class ModelTask():
                                                                             )
 
             
-        #print("CREATING PARAMETER UPDATE PROCESS")
-        self.base_model_process = mp.Process(target=update_shared_parameters, args=(self.shard_dictionary, self.mp_child))
+        #log("CREATING PARAMETER UPDATE PROCESS")
+        self.base_model_process = mp.Process(target=access_host, args=(self.shard_dictionary, self.mp_child))
         self.base_model_process.start()
         
-        #print("CREATING LISTENER PROCESS")
+        #log("CREATING LISTENER PROCESS")
         self.listener = threading.Thread(target=self.listen_to_pipe, args=(self.mp_parent, ))
         self.listener.start()
             
@@ -257,9 +278,12 @@ class ModelTask():
         self.dp_completed_shards[dp_instance] = set()
         self.dp_grad_dictionary[dp_instance] = {}
         self.dp_blocked_shards[dp_instance] = set()
-        
-        
-        
+
+
+        # take in the buffers
+        for key in self.dp_shard_dictionary[dp_instance].keys():
+            self.dp_shard_dictionary[dp_instance][key] = self.dp_buffered_shard_dictionary[dp_instance][key]
+
         for key in self.endpoint_keys:
             self.dp_grad_dictionary[dp_instance][key] = None
 
@@ -284,8 +308,8 @@ class ModelTask():
         self.minibatches_remaining -= 1 # decrement minibatch count
         
         completed_mbs = self.total_length - self.minibatches_remaining
-        if (completed_mbs % 1 == 0):
-            print("MODEL: {}, EPOCH: {}, MBS: {} / {}".format(self.name, self.total_epochs-self.epochs, completed_mbs, self.total_length))
+        
+            
             
             
         """
@@ -307,31 +331,27 @@ class ModelTask():
             self.dp_tensor_dictionary[dp_instance]["label_0"] = label 
         
         
-        
-        # Wait for all parameter updates in this batch to finish
-        st = timer()
-        for key, value in self.dp_multithreading_events[dp_instance].items():
-            value.wait()
-        end = timer()
-        print("SPENT {} on sync".format(end-st))
+
         self.update_task(dp_instance)
+        log("MODEL: {}, EPOCH: {}, MBS: {} / {}".format(self.name, self.total_epochs-self.epochs, completed_mbs, self.total_length))
         
             
     """
         Updates the ModelTask. Should be called after each shard completion.
     """
     def update_task(self, dp_instance, grad_dict=None, completed_index=None, ret_tensor_dictionary=None, ret_grad_dictionary=None):
-        
-        #print("UPDATE TASK STARTED")
+
         if completed_index is not None:
-            #print("SENDING TO MP")
+            log("UPDATE TASK STARTED FOR {}".format(completed_index))
+            log("PUSH REQUEST")
+            self.mp_parent.send(True)
             self.mp_parent.send(dp_instance)
             self.mp_parent.send(completed_index)
             self.mp_parent.send(grad_dict)
 
             self.dp_completed_shards[dp_instance].add(completed_index)
             
-        #print("CONTINUING TO EXECUTE NORMALLY")
+        #log("CONTINUING TO EXECUTE NORMALLY")
         if ret_tensor_dictionary is not None:
             self.dp_tensor_dictionary[dp_instance].update(ret_tensor_dictionary)
             
@@ -346,8 +366,7 @@ class ModelTask():
             if self.shard_dictionary[shard].direction == "f":
                 req_tensors = self.shard_to_input_dict[shard]
                 if all(req in self.dp_tensor_dictionary[dp_instance] for req in req_tensors):
-                    if self.dp_multithreading_events[dp_instance][shard].is_set():
-                        self.dp_candidate_shards[dp_instance].add(shard)
+                    self.dp_candidate_shards[dp_instance].add(shard)
             else:
                 greq_tensors = self.shard_to_output_dict[shard]
                 req_tensors = self.shard_to_input_dict[shard]
@@ -357,7 +376,7 @@ class ModelTask():
         if (len(self.dp_completed_shards[dp_instance]) == len(self.total_shards)):
             self.get_new_batch(dp_instance)
         
-        #print("FINISHED UPDATE")
+        #log("FINISHED UPDATE")
             
             
 
@@ -365,7 +384,11 @@ class ModelTask():
         key = self.dp_candidate_shards[dp_instance].pop()
         self.dp_blocked_shards[dp_instance].add(key)
         shard_task = self.dp_shard_dictionary[dp_instance][key]
-        self.dp_multithreading_events[dp_instance][key].clear()
+        log("PULL REQUEST FOR {}".format(key))
+        self.mp_parent.send(False)
+        self.mp_parent.send(dp_instance)
+        self.mp_parent.send(key)
+        log("SENT OUT {} FOR TRAINING".format(key))
         return key, shard_task
 
     

@@ -42,15 +42,20 @@ class ShardTask():
         
     def copy(self):
         #print("COPYING SELF")
-        return ShardTask(copy.deepcopy(self.model), self.direction, self.lr)
+        st = timer()
+        x = copy.deepcopy(self.model)
+        end = timer()
+        return ShardTask(x, self.direction, self.lr)
 
     def run(self, device, tensor_dictionary, gradient_tensor_dictionary=None):
-        
+        st = timer()
         self.model.to(device, non_blocking=True)
         for key, value in tensor_dictionary.items():
             tensor_dictionary[key] = value.to(device, non_blocking=True)
         
         if self.direction == "f":
+            end = timer()
+            print("PROMOTE Time taken: {}".format(end-st))
             st = timer()
             vals = self.model.forward(tensor_dictionary)
             end = timer()
@@ -60,6 +65,8 @@ class ShardTask():
             for key in b_keys:
                 if gradient_tensor_dictionary[key] is not None:
                     gradient_tensor_dictionary[key] = gradient_tensor_dictionary[key].to(device, non_blocking=True)
+            end = timer()
+            print("PROMOTE Time taken: {}".format(end-st))
             st = timer()
             vals = self.model.backward(tensor_dictionary, gradient_tensor_dictionary)
             end = timer()
