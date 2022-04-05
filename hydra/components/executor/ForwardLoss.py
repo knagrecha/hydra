@@ -81,6 +81,5 @@ class ForwardLoss():
 
         del labels
 
-        delete_batch(batch_input)
 
         return scaler, pass_back_gradients, loss.item()

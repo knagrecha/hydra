@@ -95,7 +95,7 @@ class ModelOrchestrator():
                     chosen_task.get_new_batch()
 
             # defining the parameters
-            criterion, back_input, batch, labels = None, None, None, None
+            criterion, back_input, entry_point, batch, labels = None, None, None, None, None
 
             # FORWARD PASS
             if chosen_shard.direction == "f":
@@ -104,47 +104,54 @@ class ModelOrchestrator():
                 # FINAL FORWARD
                 if chosen_shard.idx == len(chosen_task.forward_shards)- 1:
                     arg_list = [batch, chosen_task.label, chosen_task.criterion, device, chosen_task.scaler]
-                    chosen_task.scaler, new_batch, chosen_task.last_loss = chosen_shard.run(arg_list)
+                    chosen_task.scaler, new_batch_detached, chosen_task.last_loss = chosen_shard.run(arg_list)
                 # REGULAR FORWARD
                 else:
                     arg_list = [batch, device]
                     new_batch = chosen_shard.run(arg_list)
                     
+                    
                     # Detach data for forward passes. Back and final return list-type gradients which don't need
                     # to be detached anyway.
                     if not isinstance(new_batch, torch.Tensor):
-                        new_batch = [i.detach_() for i in new_batch]
+                        new_batch_detached = [i.detach_() for i in new_batch]
                     else:
-                        new_batch = new_batch.detach()
+                        new_batch_detached = new_batch.detach()
+                        
+                    new_batch = move_batch_to_device(new_batch, "cpu")
             # BACKWARD PASS       
             else:
                 batch = chosen_task.gradient
+                entry_point = chosen_task.saved_entry_points[-1]
                 back_input = chosen_task.saved_inter_output[-1]
-                arg_list = [batch, device, back_input, chosen_task.scaler]
-                chosen_task.scaler, new_batch = chosen_shard.run(arg_list)
+                arg_list = [batch, device, back_input, entry_point, chosen_task.scaler]
+                chosen_task.scaler, new_batch_detached = chosen_shard.run(arg_list)
 
             # Hold in place if possible
-            if (new_batch is not None):
+            if (new_batch_detached is not None):
                 if (chosen_task not in self.cached_tasks or chosen_task.queue_len == 1):
-                    new_batch = move_batch_to_device(new_batch, "cpu")
+                    new_batch_detached = move_batch_to_device(new_batch_detached, "cpu")
                
-            my_batch = new_batch
-
             if (chosen_task not in self.cached_tasks or chosen_task.queue_len > 1):
                 chosen_shard.model = chosen_shard.model.to("cpu", non_blocking=True)
 
             l_f = False
             if chosen_shard.idx == len(chosen_task.forward_shards)- 1 and chosen_shard.direction == "f":
                 l_f = True
-
-            # if backward pass, update the gradient
+                
+            # if backward pass or l_f update the input point
             if chosen_shard.direction == "b" or l_f:
-                chosen_task.gradient = my_batch
                 chosen_task.saved_inter_output.pop()
+                chosen_task.gradient = new_batch_detached
+
+            # if backward pass, update the backprop item
+            if chosen_shard.direction == "b":
+                chosen_task.saved_entry_points.pop()
 
             # if forward, prep it for next pass.
-            else:
-                chosen_task.saved_inter_output.append(my_batch)
+            elif not l_f:
+                chosen_task.saved_inter_output.append(new_batch_detached)
+                chosen_task.saved_entry_points.append(new_batch)
 
             #thread_lock.acquire()
             if len(chosen_task.queue) == 0:

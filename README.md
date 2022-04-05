@@ -8,10 +8,8 @@ Contact knagrech@ucsd.edu for more info.
 
 To install Hydra, follow the [Installation Guide](https://github.com/knagrecha/hydra/blob/main/INSTALL.md).
 
-## (For VLDB Reviewers)
-The files to run the end-to-end tests are twelve_model_task.py and twelve_model_task_vit.py in the examples folder. 
-
-Please note that running 12-task 8-GPU single node experiments (like the paper) is an expensive operation that demands a great deal of DRAM and continuous, heavy GPU utilization (see FAQ section for more details). If you want to run a smaller scale version (2-3 GPUs) just to observe the system, I have also prepared test files with relatively lighter workloads, three-task-lm.py and three-task-vit.py. If you want to setup custom experiments, those files can also serve as guides for the expected format.
+## Saved Intermediates Mode
+This branch takes a different approach to intermediate generation during scheduling. The standard branch uses a "checkpointed" approach to regenerate intemediates between forward and backward passes. This allows the forward pass to run much faster as it does not need to maintain gradients, and each shard execution stage is self-contained. Saved intermediates mode actually packes intermediates into shards by taking advantage of a new PyTorch hook from 1.10, but empirical testing has shown that this technique is not actually faster than checkpointing mode. However if you do wish to use this approach the option is there with this branch.
 
 ## Running
 
