@@ -253,13 +253,13 @@ class ModelOrchestrator():
         start = timer()
         old_time = 0
         while len(self.tasks) > 0:
-            if (self.verbose == 1 and timer() - old_time > 10):
-                for task in self.tasks:
-                    print(task.name + ": Epoch {}, {} / {} minibatches complete, remaining time (approx.): {:.2f}hrs, last runtime: {:.2f}, last loss: {:.2f} | ".format( task.total_epochs - task.epochs, task.total_length - task.batches_remaining, task.total_length, task.remaining_runtime/3600, task.last_runtime, task.last_loss))
-                old_time = timer()
             try:
                 self.sleep_event.wait()
                 self.sleep_event.clear()
+                if (self.verbose == 1):
+                    for task in self.tasks:
+                        print(task.name + ": Epoch {}, {} / {} minibatches complete, remaining time (approx.): {:.2f}hrs, last runtime: {:.2f}, last loss: {:.2f} | ".format( task.total_epochs - task.epochs, task.total_length - task.batches_remaining, task.total_length, task.remaining_runtime/3600, task.last_runtime, task.last_loss))
+                    old_time = timer()
                 if (len(self.tasks) == 0):
                     break
    

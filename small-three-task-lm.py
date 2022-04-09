@@ -365,7 +365,7 @@ def main():
     params = sum(p.numel() for p in model_0.parameters())
     print("Total parameters: {}".format(params))
     
-    dataloader_0 = get_data_loader_train(128) # Generate dataloader
+    dataloader_0 = get_data_loader_train(32) # Generate dataloader
     #dataloader_1 = get_data_loader_train(32)
     #dataloader_2 = get_data_loader_train(32)
     
