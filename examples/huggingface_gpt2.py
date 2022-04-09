@@ -136,20 +136,18 @@ def main():
     with torch.no_grad():
         accum_loss = 0
         for sample in valid_loader:
+            print("SAMPLE: {} / {}".format(ctr, len(valid_loader)))
             b_input_ids = sample[0]
             b_labels = sample[0]
             b_masks = sample[1]
             ctr+=1
-            print("STARTING SAMPLE PASS")
             outputs = model_0(b_input_ids, attention_mask=b_masks, labels=b_labels)
-            print("SAMPLE PASS FINISHED")
-            print("LOSS: {}".format(outputs[0]))
             my_loss = pretraining_loss(outputs[1], b_labels)
-            print("OUR LOSS: {}".format(math.exp(my_loss)))
+            print("PPL: {}".format(math.exp(my_loss)))
             accum_loss += my_loss.item()
-            if ctr % 100 == 0:
-                print("RUNNINGLOSS: {}".format(math.exp(accum_loss/ctr)))
+            print("RUNNING PPL: {}".format(math.exp(accum_loss/ctr)))
     print("ZERO SHOT TRAINING LOSS: {}".format(math.exp(accum_loss/ctr)))
+    
     
     #model_1 = get_model()
     #model_2 = get_model()
