@@ -27,10 +27,9 @@ from timeit import timeit as timer
 import gc
 from torch.utils.data import Dataset, DataLoader, random_split, RandomSampler, SequentialSampler
 from transformers import GPT2LMHeadModel,  GPT2Tokenizer, GPT2Config, GPT2LMHeadModel
-import nltk
 import random
 import numpy as np
-nltk.download('punkt')
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 
 tokenizer = GPT2Tokenizer.from_pretrained('gpt2') #gpt2-medium
@@ -65,14 +64,14 @@ class GPT2Dataset(Dataset):
     Custom loss function
 """
 
-def pretraining_loss(out, targets):
-    lm_mask, label = targets
-    out = torch.stack([out[i] for i in range(lm_mask.size(0)) if lm_mask[i]])
-    loss_computer = torch.nn.CrossEntropyLoss()
-    out = out.view(-1, 28783)
-    label = label.to(out.device)
-
-    return loss_computer(out, label)
+def pretraining_loss(lm_logits, labels):
+    # Shift so that tokens < n predict n
+    shift_logits = lm_logits[..., :-1, :].contiguous()
+    shift_labels = labels[..., 1:].contiguous()
+    # Flatten the tokens
+    loss_fct = CrossEntropyLoss()
+    loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+    return loss
 
 
 """
@@ -103,7 +102,8 @@ def get_data_loaders(b_size):
             )
 
 
-
+    print()
+    print("DATASET PREPPED")
     return train_dataloader, validation_dataloader
 
 
@@ -112,6 +112,8 @@ def get_model():
     configuration = GPT2Config.from_pretrained('gpt2', output_hidden_states=False)
 
     model = GPT2LMHeadModel.from_pretrained("gpt2", config=configuration)
+    params = sum(p.numel() for p in model.parameters())
+    print("PARAMETER COUNT: {}".format(params))
     model.resize_token_embeddings(len(tokenizer))
 
     # Set the seed value all over the place to make this reproducible.
@@ -129,15 +131,23 @@ def main():
 
     model_0 = get_model()
     print(model_0)
-    train_loader, valid_loader = get_data_loaders(32)
+    train_loader, valid_loader = get_data_loaders(1)
     
-    sample = next(iter(train_loader))
-    
-    b_input_ids = sample[0]
-    b_labels = sample[0]
-    b_masks = sample[1]
-    
-    out = model_0(b_input_ids, attention_mask=b_masks)
+    with torch.no_grad():
+        accum_loss = 0
+        for sample in valid_loader:
+            b_input_ids = sample[0]
+            b_labels = sample[0]
+            b_masks = sample[1]
+
+            print("STARTING SAMPLE PASS")
+            outputs = model_0(b_input_ids, attention_mask=b_masks, labels=b_labels)
+            print("SAMPLE PASS FINISHED")
+            print("LOSS: {}".format(outputs[0]))
+            my_loss = pretraining_loss(outputs[1], b_labels)
+            print("OUR LOSS: {}".format(my_loss))
+            accum_loss += my_loss.item()
+    print("ZERO SHOT TRAINING LOSS: {}".format(accum_loss))
     
     #model_1 = get_model()
     #model_2 = get_model()
