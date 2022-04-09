@@ -109,9 +109,9 @@ def get_data_loaders(b_size):
 
 
 def get_model():
-    configuration = GPT2Config.from_pretrained('gpt2', output_hidden_states=False)
+    configuration = GPT2Config.from_pretrained('gpt2-xl', output_hidden_states=False)
 
-    model = GPT2LMHeadModel.from_pretrained("gpt2", config=configuration)
+    model = GPT2LMHeadModel.from_pretrained("gpt2-xl", config=configuration)
     params = sum(p.numel() for p in model.parameters())
     print("PARAMETER COUNT: {}".format(params))
     model.resize_token_embeddings(len(tokenizer))
