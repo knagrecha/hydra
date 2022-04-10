@@ -25,40 +25,86 @@ from torch.utils.data import DataLoader
 from os import path
 from timeit import timeit as timer
 import gc
-from torch.utils.data import Dataset, DataLoader, random_split, RandomSampler, SequentialSampler
+from torch.utils.data import Dataset, DataLoader, random_split, RandomSampler, SequentialSampler, Subset
 from transformers import GPT2LMHeadModel,  GPT2Tokenizer, GPT2Config, GPT2LMHeadModel
 import random
 import numpy as np
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 import math
-
+import os
+import glob
 
 tokenizer = GPT2Tokenizer.from_pretrained('gpt2') #gpt2-medium
 if tokenizer.pad_token is None:
     tokenizer.add_special_tokens({'pad_token': '[PAD]'})
 
-class GPT2Dataset(Dataset):
 
-    def __init__(self, base_dataset, gpt2_type="gpt2", max_length=768, data_length=0):
 
-        self.tokenizer = tokenizer
+def load_dataset(path=".data/wikitext-2/wiki.valid.tokens", combine=50000):
+    paths = []
+    if os.path.isfile(path):
+        # Simple file
+        paths.append(path)
+    elif os.path.isdir(path):
+        # Directory
+        for (dirpath, _, fnames) in os.walk(path):
+            for fname in fnames:
+                paths.append(os.path.join(dirpath, fname))
+    else:
+        # Assume glob
+        paths = glob.glob(path)
 
-        self.input_ids = []
-        self.attn_masks = []
+    token_chunks = []
+    raw_text = ''
+    for path in paths:
+        if path.endswith('.npz'):
+            # Pre-encoded
+            with np.load(path) as npz:
+                for item in npz.files:
+                    token_chunks.append(npz[item])
+        else:
+            # Plain text
+            with open(path, 'r') as fp:
+                raw_text += fp.read()
+            if len(raw_text) >= combine:
+                tokens = np.stack(tokenizer.encode(raw_text))
+                token_chunks.append(tokens)
+                raw_text = ''
+            else:
+                raw_text += '<|endoftext|>'
+    print("RAW TEXT LENGTH: {}".format(len(raw_text)))       
+    if raw_text:
+        print("\n\n\n\ININININ\n\n\n\n")
+        tokens = np.stack(tokenizer.encode(raw_text))
+        print("TOKENS COUNT: {}".format(len(tokens)))
+        token_chunks.append(tokens)
+    return token_chunks
 
-        for idx, batch in enumerate(base_dataset):
-            print("TOKENIZING: {} / {}".format(idx, data_length), end='\r', flush=True)
-            encodings_dict = self.tokenizer('<|startoftext|>'+ batch + '<|endoftext|>', truncation=True, max_length=max_length, padding="max_length")
 
-            self.input_ids.append(torch.tensor(encodings_dict['input_ids']))
-            self.attn_masks.append(torch.tensor(encodings_dict['attention_mask']))
-    
-    def __len__(self):
-        return len(self.input_ids)
+def get_data_loader(batch_size, context_length=1024):
+    data = lazy_load()[0]
+    print(len(data))
 
-    def __getitem__(self, idx):
-        return self.input_ids[idx], self.attn_masks[idx] 
+    # Chunk data by context_length
+    ds = Subset(data, [
+        slice(i, i+context_length) 
+        for i in range(0, len(data) - (len(data) % context_length), context_length)])
+    data_loader = DataLoader(ds, batch_size=batch_size, shuffle=False)
 
+    return data_loader
+
+def lazy_load():
+    cache_path = 'cache_path.npz'
+    if not os.path.exists(cache_path):
+        # Set combine to a huge number so everything is 1 vector
+        data = load_dataset(combine=1e99)
+        # Cache encoded data.
+        print(f'caching data to {cache_path}')
+        #np.savez_compressed(cache_path, *data)
+    else:
+        data = load_dataset(path=cache_path)
+    assert len(data) > 0
+    return data
 
 
 """
@@ -75,42 +121,10 @@ def pretraining_loss(lm_logits, labels):
     return loss
 
 
-"""
-    Helper function to create a training dataloader.
-"""
-
-def get_data_loaders(b_size):
-    start = timer()
-    print("\nPreparing to load dataset....")
-    tr_dataset = WikiText2(split='train') # set to train for real testing
-    tr_dataset = GPT2Dataset(tr_dataset, data_length=36718) # create the tokenized dataset
-
-    valid_dataset = WikiText2(split='valid') # set to train for real testing
-    valid_dataset = GPT2Dataset(valid_dataset, data_length=3760) # create the tokenized dataset
-
-
-    train_dataloader = DataLoader(
-            tr_dataset,  # The training samples.
-            sampler = RandomSampler(tr_dataset), # Select batches randomly
-            batch_size = b_size # Trains with this batch size.
-        )
-
-    # For validation the order doesn't matter, so we'll just read them sequentially.
-    validation_dataloader = DataLoader(
-                valid_dataset, # The validation samples.
-                sampler = SequentialSampler(valid_dataset), # Pull out batches sequentially.
-                batch_size = b_size # Evaluate with this batch size.
-            )
-
-
-    print()
-    print("DATASET PREPPED")
-    return train_dataloader, validation_dataloader
-
 
 def get_model():
     configuration = GPT2Config.from_pretrained('gpt2-xl', output_hidden_states=False)
-
+    print(configuration)
     model = GPT2LMHeadModel.from_pretrained("gpt2-xl", config=configuration)
     params = sum(p.numel() for p in model.parameters())
     print("PARAMETER COUNT: {}".format(params))
@@ -130,8 +144,8 @@ def main():
     device_count = torch.cuda.device_count()
 
     model_0 = get_model()
-    print(model_0)
-    train_loader, valid_loader = get_data_loaders(1)
+    #print(model_0)
+    valid_loader = get_data_loader(1)
     ctr = 0
     with torch.no_grad():
         accum_loss = 0
@@ -139,11 +153,12 @@ def main():
             print("SAMPLE: {} / {}".format(ctr, len(valid_loader)))
             b_input_ids = sample[0]
             b_labels = sample[0]
-            b_masks = sample[1]
             ctr+=1
-            outputs = model_0(b_input_ids, attention_mask=b_masks, labels=b_labels)
+            outputs = model_0(b_input_ids, labels=b_labels)
             my_loss = pretraining_loss(outputs[1], b_labels)
+            their_loss = outputs[0]
             print("PPL: {}".format(math.exp(my_loss)))
+            print("HPPL: {}".format(math.exp(their_loss)))
             accum_loss += my_loss.item()
             print("RUNNING PPL: {}".format(math.exp(accum_loss/ctr)))
     print("ZERO SHOT TRAINING LOSS: {}".format(math.exp(accum_loss/ctr)))

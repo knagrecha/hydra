@@ -61,7 +61,7 @@ class Pilot():
     def shard(self, model, criterion, test_batch, double_buffer, lr, verbose):
 
         forward_shards = []
-        backward_shards = []
+
 
         total_time = 0
         
@@ -111,31 +111,7 @@ class Pilot():
                     out = partitioned_layers[-1](*batch_input)
                 else:
                     out = partitioned_layers[-1](batch_input)
-                                 
-                grads = []
-                new_out = []
-                if not (isinstance(out, torch.Tensor)):
 
-                    # Create a list of differentiable outputs and sample gradients
-                    for output in out:
-                        if output.requires_grad:
-                            grads.append(torch.ones_like(output).to(self.selected_device))
-                            new_out.append(output)
-
-                else:
-                    # Run a backward pass on the output
-                    if (out.requires_grad):
-                        new_out.append(out)
-                        grads.append(torch.ones_like(out).to(self.selected_device))
-
-                # Run a backward pass, do not discard memory - future partitioning passes will run through the 
-                # same tree.
-                if (len(new_out)!= 0):
-                    torch.autograd.backward(new_out, grads, retain_graph = True)
-                    partitioned_layers[-1].zero_grad()
-
-                del new_out
-                del grads # Gradients are discarded immediately after use
                 intermediate_activations.append(out) # Add the output of this layer as an intermediate activation
                 
                 if verbose == 1:
@@ -194,21 +170,9 @@ class Pilot():
                         model.to(self.selected_device)
                         out = model(shard_batch_input)
                         end_f = timer()
-                        start_b = timer() # used for scheduler
 
-                        gradients = out.detach().clone()
-                        torch.autograd.backward(out, gradients)
-                        model.zero_grad()
-                        
-                        
-                        del gradients
-
-                        for p in model.parameters():
-                            if p.grad is not None:
-                                del p.grad  # free some memory
                         model.cpu()  # this is an inplace operation
 
-                        end_b = timer()
                         
                         
                         if not (isinstance(out, torch.Tensor)):
@@ -233,10 +197,10 @@ class Pilot():
            
                 
                 forward_shards.append(ShardedTask(model, Forward(shard_count), "f", end_f-start_f, shard_count, lr))
-                backward_shards.append(ShardedTask(model, Backward(shard_count), "b", end_b-start_b, shard_count, lr))
+                
                 shard_count+=1
 
-                total_time = total_time + (end_f - start_f) + (end_b - start_b)
+                total_time = total_time + (end_f - start_f)
                 partitioned_layers = []
                 
                 partitioning_index -= roll_back_count # Return to partitioning from the appropriate location
@@ -245,7 +209,7 @@ class Pilot():
                 if verbose == 1:
                     print("Free Memory: {}".format(get_free_space(self.selected_device_index)))
                 
-                
+        
         # While loop has terminated, but we have not sharded the last set of layers yet
         if (len(partitioned_layers) != 0):
             
@@ -265,13 +229,6 @@ class Pilot():
             out = model(shard_batch_input) # Run a forward pass
             end_f = timer()
 
-            start_b = timer() # used for scheduler
-            
-            true_labels = torch.ones_like(out)
-            torch.autograd.backward(out, true_labels)
-            model.zero_grad()
-            
-            #del loss
             del true_labels
             del out
             
@@ -282,25 +239,21 @@ class Pilot():
             end_b = timer()
 
             forward_shards.append(ShardedTask(model, ForwardLoss(shard_count), "f", end_f - start_f, shard_count, lr) )
-            backward_shards.append(ShardedTask(model, Backward(shard_count), "b", end_b - start_b, shard_count, lr ))
 
-            total_time = total_time + (end_f - start_f) + (end_b - start_b)
+            total_time = total_time + (end_f - start_f)
 
             
         if verbose == 1:
             print("==============Number of Shards: {}======================".format(len(forward_shards)))
             print("=======Anticipated Minibatch Times: {:.2f}s=======".format(total_time))
             
-        backward_shards.reverse()
-        backward_shards.pop(0) # The forward and backward shards share their last and first shards respectively, only need 1
-
         if (double_buffer != 0):
             del buffer_space
             torch.cuda.empty_cache()
         if (forward_shards[-1].executor.type != "Forward Loss"):
             forward_shards[-1].executor = ForwardLoss(shard_count)
             
-        return forward_shards, backward_shards, total_time
+        return forward_shards, total_time
 
                 #print([get_free_space(x) for x in available_devices])
 

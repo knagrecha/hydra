@@ -105,6 +105,7 @@ class ModelOrchestrator():
                 if chosen_shard.idx == len(chosen_task.forward_shards)- 1:
                     arg_list = [batch, chosen_task.label, chosen_task.criterion, device, chosen_task.scaler]
                     chosen_task.scaler, new_batch, chosen_task.last_loss = chosen_shard.run(arg_list)
+                    chosen_task.accum_loss += chosen_task.last_loss
                 # REGULAR FORWARD
                 else:
                     arg_list = [batch, device]
@@ -116,13 +117,7 @@ class ModelOrchestrator():
                         new_batch = [i.detach_() for i in new_batch]
                     else:
                         new_batch = new_batch.detach()
-            # BACKWARD PASS       
-            else:
-                batch = chosen_task.gradient
-                back_input = chosen_task.saved_inter_output[-1]
-                arg_list = [batch, device, back_input, chosen_task.scaler]
-                chosen_task.scaler, new_batch = chosen_shard.run(arg_list)
-
+           
             # Hold in place if possible
             if (new_batch is not None):
                 if (chosen_task not in self.cached_tasks or chosen_task.queue_len == 1):
