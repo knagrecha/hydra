@@ -161,13 +161,12 @@ def main():
         for sample in valid_loader:
             print("SAMPLE: {} / {}".format(ctr, len(valid_loader)))
             b_input_ids = sample[0]
-            b_labels = sample[0]
+            b_labels = sample[0].clone()
             ctr+=1
-            outputs = model_0(b_input_ids, labels=b_labels)
-            my_loss = pretraining_loss(outputs[1], b_labels)
+            outputs = model_0(b_input_ids)
+            my_loss = pretraining_loss(outputs, b_labels)
             their_loss = outputs[0]
             print("PPL: {}".format(math.exp(my_loss)))
-            print("HPPL: {}".format(math.exp(their_loss)))
             accum_loss += my_loss.item()
             print("RUNNING PPL: {}".format(math.exp(accum_loss/ctr)))
     print("ZERO SHOT TRAINING LOSS: {}".format(math.exp(accum_loss/ctr)))
