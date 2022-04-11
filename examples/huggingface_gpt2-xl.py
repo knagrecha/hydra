@@ -33,6 +33,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 import math
 import os
 import glob
+from debugger import DebuggerGPT2LMHeadModel
 
 tokenizer = GPT2Tokenizer.from_pretrained('gpt2') #gpt2-medium
 if tokenizer.pad_token is None:
@@ -125,7 +126,7 @@ def pretraining_loss(lm_logits, labels):
 def get_model():
     configuration = GPT2Config.from_pretrained('gpt2-xl', output_hidden_states=False)
     print(configuration)
-    model = GPT2LMHeadModel.from_pretrained("gpt2-xl", config=configuration)
+    model = DebuggerGPT2LMHeadModel.from_pretrained("gpt2-xl", config=configuration)
     params = sum(p.numel() for p in model.parameters())
     print("PARAMETER COUNT: {}".format(params))
     model.resize_token_embeddings(len(tokenizer))
@@ -144,6 +145,14 @@ def main():
     device_count = torch.cuda.device_count()
 
     model_0 = get_model()
+    #model_0.transformer = DebuggerGPT2Model(model_0.transformer.config)
+    print(model_0.config)
+    print(model_0.transformer)
+    modules = []
+    
+    new_model = nn.Sequential(*modules)
+    
+    
     #print(model_0)
     valid_loader = get_data_loader(1)
     ctr = 0
