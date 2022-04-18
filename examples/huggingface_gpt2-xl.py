@@ -173,15 +173,15 @@ def get_data_loader_train(batch_size, context_length=1024):
     return data_loader
 
 def lazy_load_train():
-    cache_path = 'cache_path_train.npz'
+    cache_path = 'cache_path_train_1.npz'
     if not os.path.exists(cache_path):
         # Set combine to a huge number so everything is 1 vector
-        data = load_dataset(combine=1e99)
+        data = load_dataset_train(combine=1e99)
         # Cache encoded data.
         print(f'caching data to {cache_path}')
         #np.savez_compressed(cache_path, *data)
     else:
-        data = load_dataset(path=cache_path)
+        data = load_dataset_train(path=cache_path)
     assert len(data) > 0
     return data
 
@@ -225,7 +225,7 @@ def main():
     device_count = torch.cuda.device_count()
 
     model_0 = get_model()
-    
+    """
     #print(model_0)
     valid_loader = get_data_loader(2)
     ctr = 0
@@ -244,7 +244,7 @@ def main():
             print("RUNNING PPL: {}".format(math.exp(accum_loss/ctr)))
             break # quick stop
     print("ZERO SHOT TRAINING LOSS: {}".format(math.exp(accum_loss/ctr)))
-  
+      """
 
     modules = [GPT2EmbeddingLayer(model_0.transformer.wte, model_0.transformer.wpe, model_0.transformer.drop)]
     for mod in model_0.transformer.h:
@@ -252,9 +252,9 @@ def main():
     modules.append(GPT2OutputLayer(model_0.transformer.ln_f))
     modules.append(model_0.lm_head)
     new_model = nn.Sequential(*modules)
-    
+    """
     print("==========SEQUENTIALIZED MODEL!!!========")
-    valid_loader = get_data_loader(4)
+    valid_loader = get_data_loader(2)
     ctr = 0
     with torch.no_grad():
         accum_loss = 0
@@ -263,7 +263,6 @@ def main():
             ctr+=1
             outputs = new_model(sample)
             my_loss = pretraining_loss(outputs, label)
-            their_loss = outputs[0]
             print("PPL: {}".format(math.exp(my_loss)))
             accum_loss += my_loss.item()
             print("RUNNING PPL: {}".format(math.exp(accum_loss/ctr)))
@@ -272,12 +271,12 @@ def main():
     
     #model_1 = get_model()
     #model_2 = get_model()
-    
+    """
     
     params = sum(p.numel() for p in new_model.parameters())
     print("Total parameters: {}".format(params))
     
-    dataloader_0 = get_data_loader_train(2) # Generate dataloader
+    dataloader_0 = get_data_loader_train(4) # Generate dataloader
     #dataloader_1 = get_data_loader_train(32)
     #dataloader_2 = get_data_loader_train(32)
     
@@ -306,19 +305,15 @@ def main():
     orchestra.train_models()
     
     print("==========SEQUENTIALIZED MODEL!!!========")
-    valid_loader = get_data_loader(1)
+    valid_loader = get_data_loader(2)
     ctr = 0
     with torch.no_grad():
         accum_loss = 0
-        for sample in valid_loader:
+        for sample, label in valid_loader:
             print("SAMPLE: {} / {}".format(ctr, len(valid_loader)))
-            
-            b_input_ids = sample[0]
-            b_labels = sample[0].clone()
             ctr+=1
-            outputs = new_model(b_input_ids)
-            my_loss = pretraining_loss(outputs, b_labels)
-            their_loss = outputs[0]
+            outputs = new_model(sample)
+            my_loss = pretraining_loss(outputs, label)
             print("PPL: {}".format(math.exp(my_loss)))
             accum_loss += my_loss.item()
             print("RUNNING PPL: {}".format(math.exp(accum_loss/ctr)))
