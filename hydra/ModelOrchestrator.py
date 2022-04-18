@@ -105,7 +105,6 @@ class ModelOrchestrator():
                 if chosen_shard.idx == len(chosen_task.forward_shards)- 1:
                     arg_list = [batch, chosen_task.label, chosen_task.criterion, device, chosen_task.scaler]
                     chosen_task.scaler, new_batch, chosen_task.last_loss = chosen_shard.run(arg_list)
-                    chosen_task.accum_loss += chosen_task.last_loss
                 # REGULAR FORWARD
                 else:
                     arg_list = [batch, device]
@@ -117,7 +116,13 @@ class ModelOrchestrator():
                         new_batch = [i.detach_() for i in new_batch]
                     else:
                         new_batch = new_batch.detach()
-           
+            # BACKWARD PASS       
+            else:
+                batch = chosen_task.gradient
+                back_input = chosen_task.saved_inter_output[-1]
+                arg_list = [batch, device, back_input, chosen_task.scaler]
+                chosen_task.scaler, new_batch = chosen_shard.run(arg_list)
+
             # Hold in place if possible
             if (new_batch is not None):
                 if (chosen_task not in self.cached_tasks or chosen_task.queue_len == 1):
@@ -248,13 +253,13 @@ class ModelOrchestrator():
         start = timer()
         old_time = 0
         while len(self.tasks) > 0:
+            if (self.verbose == 1 and timer() - old_time > 10):
+                for task in self.tasks:
+                    print(task.name + ": Epoch {}, {} / {} minibatches complete, remaining time (approx.): {:.2f}hrs, last runtime: {:.2f}, last loss: {:.2f} | ".format( task.total_epochs - task.epochs, task.total_length - task.batches_remaining, task.total_length, task.remaining_runtime/3600, task.last_runtime, task.last_loss))
+                old_time = timer()
             try:
                 self.sleep_event.wait()
                 self.sleep_event.clear()
-                if (self.verbose == 1):
-                    for task in self.tasks:
-                        print(task.name + ": Epoch {}, {} / {} minibatches complete, remaining time (approx.): {:.2f}hrs, last runtime: {:.2f}, last loss: {:.2f} | ".format( task.total_epochs - task.epochs, task.total_length - task.batches_remaining, task.total_length, task.remaining_runtime/3600, task.last_runtime, task.last_loss))
-                    old_time = timer()
                 if (len(self.tasks) == 0):
                     break
    

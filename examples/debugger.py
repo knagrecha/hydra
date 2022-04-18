@@ -392,7 +392,7 @@ class DebuggerGPT2Model(GPT2PreTrainedModel):
         super().__init__(config)
 
         self.embed_dim = config.hidden_size
-
+        
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
         self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
 
@@ -437,9 +437,9 @@ class DebuggerGPT2Model(GPT2PreTrainedModel):
         position_embeds = self.wpe(position_ids) # important - will change every iter
         hidden_states = inputs_embeds + position_embeds # important - will change every iter
         hidden_states = self.drop(hidden_states)
-
+        
         output_shape = input_shape + (hidden_states.size(-1),) # important - will change every iter
-
+        print(output_shape)
         for block in self.h:
     
             hidden_states = block(
@@ -447,6 +447,42 @@ class DebuggerGPT2Model(GPT2PreTrainedModel):
             )
 
         hidden_states = self.ln_f(hidden_states)
-
         hidden_states = hidden_states.view(output_shape)
         return hidden_states
+    
+class GPT2EmbeddingLayer(nn.Module):
+    def __init__(self, wte, wpe, drop):
+        super().__init__()
+        self.wte = wte
+        self.wpe = wpe
+        self.drop =drop
+    def forward(self, input_ids):
+        input_shape = input_ids.size() # important - will change every iter
+        input_ids = input_ids.view(-1, input_shape[-1]) # important - will change every iter
+        batch_size = input_ids.shape[0] # important - will change every iter
+
+
+        device = input_ids.device
+
+
+        past_length = 0
+
+        position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
+        position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
+
+        inputs_embeds = self.wte(input_ids) # important - will change every iter
+        position_embeds = self.wpe(position_ids) # important - will change every iter
+        hidden_states = inputs_embeds + position_embeds # important - will change every iter
+        return self.drop(hidden_states)
+
+    
+class GPT2OutputLayer(nn.Module):
+    def __init__(self, ln_f):
+        super().__init__()
+        self.ln_f = ln_f
+        self.output_shape = (-1, 1024, 1600) # manually set/fix this
+    def forward(self, hidden_states):
+        hidden_states = self.ln_f(hidden_states)
+        return hidden_states.view(self.output_shape)
+        
+         

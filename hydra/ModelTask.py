@@ -49,8 +49,6 @@ class ModelTask():
         self.partitioner = partitioner
         
         
-        self.accum_loss = 0
-        
         self.lr = lr
         self.total_epochs = epochs
         self.epochs = epochs

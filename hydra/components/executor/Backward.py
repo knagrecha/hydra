@@ -30,9 +30,10 @@ class Backward():
         model.to(device, non_blocking=True)
         model.zero_grad()  # zeroes the gradient buffers of all parameters
         optimizer.zero_grad()  # zero the gradient buffers
-
+        
+        print("BACKPASS ON SHARD: {}".format(self.idx))
         if not isinstance(back_input, torch.Tensor):
-            #print("Back input is a list")
+            print("Back input is a list")
             toy_input = [x.to(device, non_blocking=True) for x in back_input]
 
             if self.idx != 0:
