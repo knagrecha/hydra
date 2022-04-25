@@ -218,6 +218,13 @@ def get_model():
     np.random.seed(seed_val)
     torch.manual_seed(seed_val)
     torch.cuda.manual_seed_all(seed_val)
+    modules = [GPT2EmbeddingLayer(model.transformer.wte, model.transformer.wpe, model.transformer.drop)]
+    for mod in model_0.transformer.h:
+        modules.append(mod)
+    modules.append(GPT2OutputLayer(model.transformer.ln_f))
+    modules.append(model.lm_head)
+    model = nn.Sequential(*modules)
+    
     return model
     
 
@@ -225,55 +232,19 @@ def main():
     device_count = torch.cuda.device_count()
 
     model_0 = get_model()
-    """
-    #print(model_0)
-    valid_loader = get_data_loader(2)
-    ctr = 0
-    with torch.no_grad():
-        accum_loss = 0
-        for sample, label in valid_loader:
-            print(sample.shape)
-            
-            print("SAMPLE: {} / {}".format(ctr, len(valid_loader)))
-            ctr+=1
-            outputs = model_0(sample)
-            my_loss = pretraining_loss(outputs, label)
-            their_loss = outputs[0]
-            print("PPL: {}".format(math.exp(my_loss)))
-            accum_loss += my_loss.item()
-            print("RUNNING PPL: {}".format(math.exp(accum_loss/ctr)))
-            break # quick stop
-    print("ZERO SHOT TRAINING LOSS: {}".format(math.exp(accum_loss/ctr)))
-      """
-
-    modules = [GPT2EmbeddingLayer(model_0.transformer.wte, model_0.transformer.wpe, model_0.transformer.drop)]
-    for mod in model_0.transformer.h:
-        modules.append(mod)
-    modules.append(GPT2OutputLayer(model_0.transformer.ln_f))
-    modules.append(model_0.lm_head)
-    new_model = nn.Sequential(*modules)
-    """
-    print("==========SEQUENTIALIZED MODEL!!!========")
-    valid_loader = get_data_loader(2)
-    ctr = 0
-    with torch.no_grad():
-        accum_loss = 0
-        for sample, label in valid_loader:
-            print("SAMPLE: {} / {}".format(ctr, len(valid_loader)))
-            ctr+=1
-            outputs = new_model(sample)
-            my_loss = pretraining_loss(outputs, label)
-            print("PPL: {}".format(math.exp(my_loss)))
-            accum_loss += my_loss.item()
-            print("RUNNING PPL: {}".format(math.exp(accum_loss/ctr)))
-            break # quick stop
-    print("ZERO SHOT TRAINING LOSS: {}".format(math.exp(accum_loss/ctr)))
-    
-    #model_1 = get_model()
-    #model_2 = get_model()
-    """
-    
-    params = sum(p.numel() for p in new_model.parameters())
+    model_1 = get_model()
+    model_2 = get_model()
+    model_3 = get_model()
+    model_4 = get_model()
+    model_5 = get_model()
+    model_6 = get_model()
+    model_7 = get_model()
+    model_8 = get_model()
+    model_9 = get_model()
+    model_10 = get_model()
+    model_11 = get_model()
+  
+    params = sum(p.numel() for p in model_0.parameters())
     print("Total parameters: {}".format(params))
     
     dataloader_0 = get_data_loader_train(4) # Generate dataloader
