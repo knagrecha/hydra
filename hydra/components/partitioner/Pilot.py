@@ -77,7 +77,7 @@ class Pilot():
         true_labels = test_batch[-1]
         
         # The rest of the return is the batch
-        shard_batch_input = test_batch[0:len(test_batch)-1]
+        shard_batch_input = test_batch[0]
         
         # Place the batch on-device
         batch_input = move_batch_to_device(shard_batch_input, self.selected_device) 
@@ -98,24 +98,27 @@ class Pilot():
             
         while partitioning_index < (len(all_layers)):
             
-            batch_input = move_batch_to_device(batch_input, self.selected_device)      
-            #print(get_free_space(self.selected_device_index))
+            batch_input = move_batch_to_device(batch_input, self.selected_device)  
+           
+            print("FREE MEMORY AFTER BATCH TRANSFER: {}".format(get_free_space(self.selected_device_index)))
             oom = False
           
             try:
                 
                 all_layers[partitioning_index] = all_layers[partitioning_index].to(self.selected_device)
+                print("FREE MEMORY AFTER LAYER ADD ON: {}".format(get_free_space(self.selected_device_index)))
                 partitioned_layers.append(all_layers[partitioning_index])
 
                 if (isinstance(batch_input, tuple) or isinstance(batch_input, list)):
                     out = partitioned_layers[-1](*batch_input)
                 else:
                     out = partitioned_layers[-1](batch_input)
-                                 
+                print("FREE MEMORY AFTER FORWARD: {}".format(get_free_space(self.selected_device_index)))
                 grads = []
                 new_out = []
+                
+                
                 if not (isinstance(out, torch.Tensor)):
-
                     # Create a list of differentiable outputs and sample gradients
                     for output in out:
                         if output.requires_grad:
@@ -128,12 +131,13 @@ class Pilot():
                         new_out.append(out)
                         grads.append(torch.ones_like(out).to(self.selected_device))
 
+                print("FREE MEMORY AFTER BUILDING GRADIENTS: {}".format(get_free_space(self.selected_device_index)))
                 # Run a backward pass, do not discard memory - future partitioning passes will run through the 
                 # same tree.
                 if (len(new_out)!= 0):
                     torch.autograd.backward(new_out, grads, retain_graph = True)
                     partitioned_layers[-1].zero_grad()
-
+                print("FREE MEMORY AFTER BACKPROP: {}".format(get_free_space(self.selected_device_index)))
                 del new_out
                 del grads # Gradients are discarded immediately after use
                 intermediate_activations.append(out) # Add the output of this layer as an intermediate activation
@@ -164,7 +168,7 @@ class Pilot():
                     oom = True
 
             if (oom):
-
+                
                 successful_run = False
                 roll_back_count = 0
                 while not successful_run:
@@ -172,34 +176,34 @@ class Pilot():
                         roll_back_count += 1
                         successful_run = True
                         batch_input = None
+                        gradients = None
+                        model = None
+                        out = None
                         pioneer_layer = partitioned_layers.pop() # Remove the last added layer
                         pioneer_layer = pioneer_layer.cpu() # Move it back to CPU memory
+                        print(next(all_layers[partitioning_index].parameters()).device)
                         if (len(partitioned_layers) == 0):
                             raise RuntimeError("Error: shard size is 0")
 
                         # We do an end-to-end test on the shard. Discard false intermediate activations.
                         del intermediate_activations
                         intermediate_activations = []
-                        torch.cuda.empty_cache() # Consider deleting?
-
+                        
+                        
                         oom = False
 
                         shard_batch_input = move_batch_to_device(shard_batch_input, self.selected_device)
-
                         
-
-
                         start_f = timer() # used for scheduler
                         model = ShardModel(nn.ModuleList(partitioned_layers)) # Create a shard-model
                         model.to(self.selected_device)
+                        torch.cuda.empty_cache() # Consider deleting?
                         out = model(shard_batch_input)
                         end_f = timer()
                         start_b = timer() # used for scheduler
-
                         gradients = out.detach().clone()
                         torch.autograd.backward(out, gradients)
                         model.zero_grad()
-                        
                         
                         del gradients
 
@@ -230,8 +234,8 @@ class Pilot():
                             successful_run = False
 
                 
-           
-                
+                params = sum(p.numel() for p in model.parameters())
+                print("NEW SHARD - {} PARAMETERS".format(params))
                 forward_shards.append(ShardedTask(model, Forward(shard_count), "f", end_f-start_f, shard_count, lr))
                 backward_shards.append(ShardedTask(model, Backward(shard_count), "b", end_b-start_b, shard_count, lr))
                 shard_count+=1

@@ -219,7 +219,7 @@ def get_model():
     torch.manual_seed(seed_val)
     torch.cuda.manual_seed_all(seed_val)
     modules = [GPT2EmbeddingLayer(model.transformer.wte, model.transformer.wpe, model.transformer.drop)]
-    for mod in model_0.transformer.h:
+    for mod in model.transformer.h:
         modules.append(mod)
     modules.append(GPT2OutputLayer(model.transformer.ln_f))
     modules.append(model.lm_head)
@@ -238,13 +238,15 @@ def main():
     print("Total parameters: {}".format(params))
     
     dataloader_0 = get_data_loader_train(8) # Generate dataloader
+    sample, label = next(iter(dataloader_0))
+    print(sample.shape)
     #dataloader_1 = get_data_loader_train(32)
     #dataloader_2 = get_data_loader_train(32)
     
     
 
     
-    task_0 = ModelTask("Model 0", new_model, pretraining_loss, dataloader_0, 0.001, 1)
+    task_0 = ModelTask("Model 0", model_0, pretraining_loss, dataloader_0, 0.001, 1)
     #task_1 = ModelTask("Model 1", model_1, pretraining_loss, dataloader_1, 0.001, 4)
     #task_2 = ModelTask("Model 2", model_2, pretraining_loss, dataloader_2, 0.001, 4)
     
@@ -260,7 +262,7 @@ def main():
      errors in partitioning memory consumption.
     """
     
-    orchestra.buffer = 10000
+    orchestra.buffer = 5000
 
     orchestra.generate()
     orchestra.train_models()
@@ -273,7 +275,7 @@ def main():
         for sample, label in valid_loader:
             print("SAMPLE: {} / {}".format(ctr, len(valid_loader)))
             ctr+=1
-            outputs = new_model(sample)
+            outputs = model_0(sample)
             my_loss = pretraining_loss(outputs, label)
             print("PPL: {}".format(math.exp(my_loss)))
             accum_loss += my_loss.item()
@@ -281,6 +283,6 @@ def main():
     print("ZERO SHOT TRAINING LOSS: {}".format(math.exp(accum_loss/ctr)))
     
     
-    torch.save(new_model, "model_{}-{}-{}".format(datetime.now().hour, datetime.now().minute, datetime.now().second))
+    torch.save(model_0, "model_{}-{}-{}".format(datetime.now().hour, datetime.now().minute, datetime.now().second))
 if __name__ == "__main__":
     main()
