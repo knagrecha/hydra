@@ -36,7 +36,7 @@ import glob
 from debugger import DebuggerGPT2LMHeadModel, GPT2EmbeddingLayer, GPT2OutputLayer
 from datetime import datetime
 
-tokenizer = GPT2Tokenizer.from_pretrained('gpt2') #gpt2-medium
+tokenizer = GPT2Tokenizer.from_pretrained('gpt2-xl') #gpt2-medium
 if tokenizer.pad_token is None:
     tokenizer.add_special_tokens({'pad_token': '[PAD]'})
 
@@ -247,7 +247,7 @@ def main():
     params = sum(p.numel() for p in model_0.parameters())
     print("Total parameters: {}".format(params))
     
-    dataloader_0 = get_data_loader_train(4) # Generate dataloader
+    dataloader_0 = get_data_loader_train(2) # Generate dataloader
     #dataloader_1 = get_data_loader_train(32)
     #dataloader_2 = get_data_loader_train(32)
     

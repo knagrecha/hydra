@@ -37,7 +37,7 @@ import glob
 from debugger import DebuggerGPT2LMHeadModel, GPT2EmbeddingLayer, GPT2OutputLayer
 from datetime import datetime
 
-tokenizer = GPT2Tokenizer.from_pretrained('gpt2') #gpt2-medium
+tokenizer = GPT2Tokenizer.from_pretrained('gpt2-xl') #gpt2-medium
 if tokenizer.pad_token is None:
     tokenizer.add_special_tokens({'pad_token': '[PAD]'})
 
@@ -227,13 +227,13 @@ def get_model():
     
 class CustomTrainer(Trainer):
     def get_train_dataloader(self):
-        return get_data_loader_train(4)
+        return get_data_loader_train(2)
     def get_test_dataloader(self):
-        return get_data_loader(4)
+        return get_data_loader(2)
     def compute_loss(self, model, inputs, return_outputs=False):
         labels = inputs[1]
         sample = inputs[0]
-        outputs = model(inputs)
+        outputs = model(sample)
         out = outputs[0]
         # compute custom loss (suppose one has 3 labels with different weights)
         loss_fct = pretraining_loss
