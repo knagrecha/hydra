@@ -1,0 +1,28 @@
+{
+    "zero_optimization": {
+        "stage": 3,
+        "offload_optimizer": {
+            "device": "nvme",
+            "nvme_path": "/nvme_data"
+        }
+        "offload_param": {
+            "device": "nvme",
+            "nvme_path": "/nvme_data"
+        }s
+    },
+    "fp16": {
+        "enabled": true
+    },
+    "optimizer": {
+        "type": "AdamW",
+        "params": {
+        "lr": 0.001,
+        "betas": [
+            0.8,
+            0.999
+        ],
+        "eps": 1e-8,
+        "weight_decay": 3e-7
+        }
+    }
+}
