@@ -20,6 +20,7 @@ import customLayers as custom
 import copy
 import torch
 import torch.nn as nn
+import argparse
 from torchtext.datasets import WikiText2
 from torch.utils.data import DataLoader
 from os import path
@@ -220,9 +221,9 @@ def get_model_stack(count, model):
     
     modules = [GPT2EmbeddingLayer(model.transformer.wte, model.transformer.wpe, model.transformer.drop)]
     ctr = 0
-    for mod in model_0.transformer.h:
-        if (ctr > len(model_0.transformer.h)):
-            modules.append(model_0.transformer.h[-1].clone())
+    for mod in model.transformer.h:
+        if (ctr > len(model.transformer.h)):
+            modules.append(model.transformer.h[-1].clone())
         else:
             modules.append(mod)
         ctr+=1
@@ -242,7 +243,7 @@ def naive(base_model, dataloader):
         mod = get_model_stack(i, base_model)
         print("Parameters: {}".format(sum(p.numel() for p in mod.parameters())))
         sample, label = next(iter(dataloader))
-        optimizer = torch.optim.SGD(mod.parameters())
+        optimizer = torch.optim.SGD(mod.parameters(), lr=0.0001)
         mod = mod.to("cuda:0")
         sample = sample.to("cuda:0")
         label = label.to("cuda:0")
@@ -262,7 +263,7 @@ def checkpointed(base_model, dataloader):
         mod = get_model_stack(i, base_model)
         print("Parameters: {}".format(sum(p.numel() for p in mod.parameters())))
         sample, label = next(iter(dataloader))
-        optimizer = torch.optim.SGD(mod.parameters())
+        optimizer = torch.optim.SGD(mod.parameters(), lr=0.0001)
         mod = mod.to("cuda:0")
         sample = sample.to("cuda:0")
         label = label.to("cuda:0")
@@ -275,28 +276,35 @@ def checkpointed(base_model, dataloader):
         print("TIME: {}".format(end-st))
         
         
-def deepspeed(base_model, dataloader):
+def deepspeed_train(base_model, dataloader):
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--local_rank", type=int, default=0)
+    parser = deepspeed.add_config_arguments(parser)
+    
+
+    args = parser.parse_args()
+    print(args)
     for i in range(20, 50):
         st = timer()
         torch.cuda.empty_cache()
         print("Testing stack of {} encoders")
         
-        with deepspeed.zero.Init():
-            mod = get_model_stack(i, base_model)
         
-        model_engine, optimizer, _, _ = deepspeed.initialize(model=mod,model_parameters=mod.parameters())
+        mod = get_model_stack(i, base_model)
+        
+        model_engine, optimizer, _, _ = deepspeed.initialize(args, model=mod,optimizer = torch.optim.SGD(mod.parameters(), lr=0.0001))
         
         print("Parameters: {}".format(sum(p.numel() for p in mod.parameters())))
         sample, label = next(iter(dataloader))
         optimizer = torch.optim.SGD(mod.parameters())
-        mod = mod.to("cuda:0")
+        mod = model_engine.to("cuda:0")
         sample = sample.to("cuda:0")
         label = label.to("cuda:0")
-        out = torch.utils.checkpoint.checkpoint_sequential(mod, i, sample)
+        out = model_engine(sample)
         loss = pretraining_loss(out, label)
-        loss.backward()
-        optimizer.step()
-        mod.zero_grad()
+        model_engine.backward(loss)
+        model_engine.step()
         end = timer()
         print("TIME: {}".format(end-st))
         
@@ -305,7 +313,7 @@ def deepspeed(base_model, dataloader):
 def main():
     base_model = get_base_model()
     dataloader = get_data_loader_train(1)
-    deepspeed(base_model, dataloader)
+    deepspeed_train(base_model, dataloader)
 
 if __name__ == "__main__":
     main()
