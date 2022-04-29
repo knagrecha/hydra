@@ -285,19 +285,15 @@ def deepspeed_train(base_model, dataloader):
 
     args = parser.parse_args()
     print(args)
-    for i in range(20, 50):
+    for i in range(20, 50, 5):
         st = timer()
         torch.cuda.empty_cache()
-        print("Testing stack of {} encoders")
-        
         
         mod = get_model_stack(i, base_model)
-        
         model_engine, optimizer, _, _ = deepspeed.initialize(args, model=mod,optimizer = torch.optim.SGD(mod.parameters(), lr=0.0001))
-        
+        print("Testing stack of {} encoders".format(i))
         print("Parameters: {}".format(sum(p.numel() for p in mod.parameters())))
         sample, label = next(iter(dataloader))
-        optimizer = torch.optim.SGD(mod.parameters())
         mod = model_engine.to("cuda:0")
         sample = sample.to("cuda:0")
         label = label.to("cuda:0")

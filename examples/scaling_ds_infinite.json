@@ -5,15 +5,15 @@
         "stage": 3,
         "offload_optimizer": {
             "device": "nvme",
-            "nvme_path": "/nvme_data"
+            "nvme_path": "/home/ubuntu/hydra/examples/nvme_data"
         },
         "offload_param": {
             "device": "nvme",
-            "nvme_path": "/nvme_data"
+            "nvme_path": "/home/ubuntu/hydra/examples/nvme_data"
         }
     },
     "fp16": {
-        "enabled": true
+        "enabled": false
     },
     "train_batch_size": 1,
   "gradient_accumulation_steps": 1,
