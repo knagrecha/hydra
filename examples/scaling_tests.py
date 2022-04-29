@@ -222,24 +222,21 @@ def get_model_stack(count, model):
     modules = [GPT2EmbeddingLayer(model.transformer.wte, model.transformer.wpe, model.transformer.drop)]
     ctr = 0
     for mod in model.transformer.h:
-        if (ctr > len(model.transformer.h)):
-            modules.append(model.transformer.h[-1].clone())
-        else:
-            modules.append(mod)
+        modules.append(copy.deepcopy(model.transformer.h[0]))
         ctr+=1
         if ctr == count:
             break
             
     modules.append(GPT2OutputLayer(model.transformer.ln_f))
     modules.append(model.lm_head)
-    model = nn.Sequential(*modules)
-    return model
+    new_model = nn.Sequential(*modules)
+    return new_model
     
 def naive(base_model, dataloader):
     for i in range(20, 50):
         st = timer()
         torch.cuda.empty_cache()
-        print("Testing stack of {} encoders")
+        print("Testing stack of {} encoders".format(i))
         mod = get_model_stack(i, base_model)
         print("Parameters: {}".format(sum(p.numel() for p in mod.parameters())))
         sample, label = next(iter(dataloader))
@@ -259,7 +256,7 @@ def checkpointed(base_model, dataloader):
     for i in range(20, 50):
         st = timer()
         torch.cuda.empty_cache()
-        print("Testing stack of {} encoders")
+        print("Testing stack of {} encoders".format(i))
         mod = get_model_stack(i, base_model)
         print("Parameters: {}".format(sum(p.numel() for p in mod.parameters())))
         sample, label = next(iter(dataloader))
@@ -285,14 +282,16 @@ def deepspeed_train(base_model, dataloader):
 
     args = parser.parse_args()
     print(args)
-    for i in range(20, 50, 5):
+    for i in range(20, 25, 1):
         st = timer()
         torch.cuda.empty_cache()
-        
         mod = get_model_stack(i, base_model)
-        model_engine, optimizer, _, _ = deepspeed.initialize(args, model=mod,optimizer = torch.optim.SGD(mod.parameters(), lr=0.0001))
+        print("\n\n\n\n\n\n\n\n\n")
         print("Testing stack of {} encoders".format(i))
         print("Parameters: {}".format(sum(p.numel() for p in mod.parameters())))
+        print(mod)
+        model_engine, optimizer, _, _ = deepspeed.initialize(args, model=mod,optimizer = torch.optim.SGD(mod.parameters(), lr=0.0001))
+        
         sample, label = next(iter(dataloader))
         mod = model_engine.to("cuda:0")
         sample = sample.to("cuda:0")
