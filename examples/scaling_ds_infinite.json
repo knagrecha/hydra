@@ -4,11 +4,11 @@
     "zero_optimization": {
         "stage": 3,
         "offload_optimizer": {
-            "device": "cpu",
+            "device": "nvme",
             "nvme_path": "/home/jovyan/hydra/examples/nvme_data"
         },
         "offload_param": {
-            "device": "cpu",
+            "device": "nvme",
             "nvme_path": "/home/jovyan/hydra/examples/nvme_data"
         },
         "overlap_comm": true,
