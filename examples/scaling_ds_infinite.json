@@ -5,22 +5,23 @@
         "stage": 3,
         "offload_optimizer": {
             "device": "nvme",
-            "nvme_path": "/home/ubuntu/hydra/examples/nvme_data"
+            "nvme_path": "/home/jovyan/hydra/examples/nvme_data"
         },
         "offload_param": {
             "device": "nvme",
-            "nvme_path": "/home/ubuntu/hydra/examples/nvme_data"
+            "nvme_path": "/home/jovyan/hydra/examples/nvme_data"
         }
     },
     "fp16": {
         "enabled": false
     },
-    "train_batch_size": 1,
+    "train_batch_size": 4,
   "gradient_accumulation_steps": 1,
   "optimizer": {
     "type": "SGD",
     "params": {
       "lr": 0.0001
     }
-  }
+  },
+ "train_micro_batch_size_per_gpu": 2
 }
