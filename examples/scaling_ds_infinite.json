@@ -4,13 +4,26 @@
     "zero_optimization": {
         "stage": 3,
         "offload_optimizer": {
-            "device": "nvme",
+            "device": "cpu",
             "nvme_path": "/home/jovyan/hydra/examples/nvme_data"
         },
         "offload_param": {
-            "device": "nvme",
+            "device": "cpu",
             "nvme_path": "/home/jovyan/hydra/examples/nvme_data"
-        }
+        },
+        "overlap_comm": true,
+        "contiguous_gradients": true,
+        "sub_group_size": 1e9,
+        "allgather_partitions": true,
+        "allgather_bucket_size": 1e8,
+        "overlap_comm": true,
+        "reduce_scatter": true,
+        "reduce_bucket_size": 1e8,
+        "contiguous_gradients": true,
+        "stage3_prefetch_bucket_size": 5e8,
+        "stage3_param_persistence_threshold": 1e6,
+        "stage3_max_live_parameters": 1e9,
+        "stage3_max_reuse_distance": 1e9
     },
     "fp16": {
         "enabled": false
@@ -22,6 +35,5 @@
     "params": {
       "lr": 0.0001
     }
-  },
- "train_micro_batch_size_per_gpu": 2
+  }
 }

@@ -457,14 +457,13 @@ class GPT2EmbeddingLayer(nn.Module):
         self.wpe = wpe
         self.drop =drop
     def forward(self, input_ids):
-        print("[EMBEDDING] RECEIVED SHAPE: {}".format(input_ids.shape))
         input_shape = input_ids.size() # important - will change every iter
         input_ids = input_ids.view(-1, input_shape[-1]) # important - will change every iter
         batch_size = input_ids.shape[0] # important - will change every iter
 
 
         device = input_ids.device
-
+        print("DEVICE: {}".format(device))
 
         past_length = 0
 
@@ -474,8 +473,6 @@ class GPT2EmbeddingLayer(nn.Module):
         inputs_embeds = self.wte(input_ids) # important - will change every iter
         position_embeds = self.wpe(position_ids) # important - will change every iter
         hidden_states = inputs_embeds + position_embeds # important - will change every iter
-
-        print("[EMBEDDING] OUTPUT SHAPE: {}".format(hidden_states.shape))
         return self.drop(hidden_states)
 
     

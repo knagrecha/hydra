@@ -24,14 +24,14 @@ from os import path
 from timeit import timeit as timer
 import gc
 from torch.utils.data import Dataset, DataLoader, random_split, RandomSampler, SequentialSampler, Subset
-from transformers import GPT2LMHeadModel,  GPT2Tokenizer, GPT2Config, GPT2LMHeadModel
+from transformers import GPT2LMHeadModel,  GPT2Tokenizer, GPT2Config, GPT2LMHeadModel, Trainer, TrainingArguments
+from debugger import DebuggerGPT2LMHeadModel
 import random
 import numpy as np
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 import math
 import os
 import glob
-from debugger import DebuggerGPT2LMHeadModel, GPT2EmbeddingLayer, GPT2OutputLayer
 from datetime import datetime
 import deepspeed
 tokenizer = GPT2Tokenizer.from_pretrained('gpt2') #gpt2-medium
@@ -158,7 +158,7 @@ def load_dataset_train(path=".data/wikitext-2/wiki.train.tokens", combine=50000)
 
 
 
-def get_data_loader_train(batch_size, context_length=1024):
+def get_data_loader_train(context_length=1024):
     data = lazy_load_train()[0]
     print(len(data))
 
@@ -166,9 +166,7 @@ def get_data_loader_train(batch_size, context_length=1024):
     ds = Subset(data, [
         slice(i, i+context_length) 
         for i in range(0, len(data) - (len(data) % context_length), context_length)])
-    data_loader = DataLoader(ds, batch_size=batch_size, shuffle=False, collate_fn=collate_batch)
-
-    return data_loader
+    return ds
 
 def lazy_load_train():
     cache_path = 'cache_path_train_1.npz'
@@ -214,181 +212,22 @@ def get_base_model():
     torch.cuda.manual_seed_all(seed_val)
     return model
 
-class ModuleWrapperIgnores2ndArg(nn.Module):
-    def __init__(self, module):
-        super().__init__()
-        self.module = module
+class CustomTrainer(Trainer):
+    def compute_loss(self, model, inputs, return_outputs=False):
+        sample, label = inputs
+        print(sample.shape)
+        print(label.shape)
+        outputs = model(sample)
+        loss = pretraining_loss(outputs, label)
+        return (loss, outputs) if return_outputs else loss
 
-    def forward(self,x):
-        x = x.long()
-        x = self.module(x)
-        return x
-
-def get_model_stack_for_checkpoint(model):
-    
-    modules = [ModuleWrapperIgnores2ndArg(GPT2EmbeddingLayer(model.transformer.wte, model.transformer.wpe, model.transformer.drop))]
-    ctr = 0
-    for mod in model.transformer.h:
-        modules.append(mod)
-        
-            
-    modules.append(GPT2OutputLayer(model.transformer.ln_f))
-    modules.append(model.lm_head)
-    new_model = nn.Sequential(*modules)
-    print(new_model)
-    return new_model
-
-
-def get_model_stack(model):
-    modules = [GPT2EmbeddingLayer(model.transformer.wte, model.transformer.wpe, model.transformer.drop)]
-    for mod in model.transformer.h:
-        modules.append(mod)
-    modules.append(GPT2OutputLayer(model.transformer.ln_f))
-    modules.append(model.lm_head)
-    new_model = nn.Sequential(*modules)
-    return new_model
-    
-def naive(base_model, dataloader):
-    for i in range(10, 50):
-        st = timer()
-        torch.cuda.empty_cache()
-        print("Testing stack of {} encoders".format(i))
-        mod = get_model_stack(i, base_model)
-        print("Parameters: {}".format(sum(p.numel() for p in mod.parameters())))
-        sample, label = next(iter(dataloader))
-        optimizer = torch.optim.SGD(mod.parameters(), lr=0.0001)
-        mod = mod.to("cuda:0")
-        sample = sample.to("cuda:0")
-        label = label.to("cuda:0")
-        out = mod(sample)
-        loss = pretraining_loss(out, label)
-        loss.backward()
-        optimizer.step()
-        mod.zero_grad()
-        end = timer()
-        del mod
-        del loss
-        del optimizer
-        del out
-        del sample
-        del label
-        print("TIME: {}".format(end-st))
-        
-        
-class CheckPointedModel(nn.Module):
-    def __init__(self, module, count):
-        super().__init__()
-        self.module = module
-        self.count = count
-
-    def forward(self,x):
-        return torch.utils.checkpoint.checkpoint_sequential(self.module, self.count, x)
-        
-def checkpointed(base_model, dataloader):
-    for i in range(45, 60):
-        st = timer()
-        torch.cuda.empty_cache()
-        print("Testing stack of {} encoders".format(i))
-        mod = get_model_stack_for_checkpoint(i, base_model)
-        print("Parameters: {}".format(sum(p.numel() for p in mod.parameters())))
-        sample, label = next(iter(dataloader))
-        optimizer = torch.optim.SGD(mod.parameters(), lr=0.0001)
-        mod = mod.to("cuda:0")
-        sample = sample.to("cuda:0")
-        sample = sample.type(torch.float32)
-        sample.requires_grad_(True)
-        label = label.to("cuda:0")
-        out = torch.utils.checkpoint.checkpoint_sequential(mod, i, sample)
-        loss = pretraining_loss(out, label)
-        loss.backward()
-        optimizer.step()
-        mod.zero_grad()
-        end = timer()
-        del mod
-        del loss
-        del optimizer
-        del out
-        del sample
-        del label
-        print("TIME: {}".format(end-st))
-        
-        
-def deepspeed_train(base_model, dataloader):
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--local_rank", type=int, default=0)
-    parser = deepspeed.add_config_arguments(parser)
-    args = parser.parse_args()
-    print(args)
-    
-    st = timer()
-    torch.cuda.empty_cache()
-    mod = get_model_stack(base_model)
-    print("\n\n\n\n\n\n\n\n\n")
-    print("DeepSpeed Train Job")
-    print(mod)
-    model_engine, optimizer, _, _ = deepspeed.initialize(args, model=mod,optimizer = torch.optim.SGD(mod.parameters(), lr=0.0001))
-    ctr = 0
-    for sample, label in dataloader:
-        print("BATCH: {} / {}".format(ctr, len(dataloader)), end='\r', flush=True)
-        model_engine = model_engine.to("cuda:0")
-        sample = sample.to("cuda:0")
-        label = label.to("cuda:0")
-        out = model_engine(sample)
-        loss = pretraining_loss(out, label)
-        model_engine.backward(loss)
-        model_engine.step()
-        del mod
-        del model_engine
-        del loss
-        del optimizer
-        del out
-        del sample
-        del label
-    end = timer()
-    print()
-    print("TIME: {}".format(end-st))
-        
-def deepspeed_train_with_checkpointing(base_model, dataloader):
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--local_rank", type=int, default=0)
-    parser = deepspeed.add_config_arguments(parser)
-    args = parser.parse_args()
-    print(args)
-    for i in range(50, 75, 1):
-        st = timer()
-        torch.cuda.empty_cache()
-        mod = CheckPointedModel(get_model_stack_for_checkpoint(i, base_model), i)
-        print("\n\n\n\n\n\n\n\n\n")
-        print("Testing stack of {} encoders".format(i))
-        print("Parameters: {}".format(sum(p.numel() for p in mod.parameters())))
-        print(mod)
-        model_engine, optimizer, _, _ = deepspeed.initialize(args, model=mod,optimizer = torch.optim.SGD(mod.parameters(), lr=0.0001))
-        
-        sample, label = next(iter(dataloader))
-        model_engine = model_engine.to("cuda:0")
-        sample = sample.to("cuda:0")
-        sample = sample.type(torch.float32)
-        sample.requires_grad_(True)
-        label = label.to("cuda:0")
-        out = model_engine(sample)
-        loss = pretraining_loss(out, label)
-        model_engine.backward(loss)
-        model_engine.step()
-        end = timer()
-        del mod
-        del model_engine
-        del loss
-        del optimizer
-        del out
-        del sample
-        del label
-        print("TIME: {}".format(end-st))
-        
             
 def main():
     base_model = get_base_model()
-    dataloader = get_data_loader_train(4)
-    deepspeed_train(base_model, dataloader)
+    dataset = get_data_loader_train()
+    training_args = TrainingArguments(output_dir="./output/", learning_rate=0.0001, per_device_train_batch_size=2, deepspeed="scaling_ds_infinite.json")
+    trainer = CustomTrainer(base_model, args=training_args, train_dataset=dataset, data_collator=collate_batch, optimizers=(torch.optim.SGD(base_model.parameters(), lr=0.0001), None))
+    trainer.train()
 
 if __name__ == "__main__":
     main()
