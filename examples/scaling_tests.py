@@ -291,8 +291,7 @@ class CheckPointedModel(nn.Module):
         self.count = count
 
     def forward(self,x):
-        return torch.utils.checkpoint.checkpoint_sequential(self.module, self.count, x)
-        
+       return torch.utils.checkpoint.checkpoint_sequential(self.module, self.count, x) 
 def checkpointed(base_model, dataloader):
     for i in range(45, 60):
         st = timer()
@@ -328,13 +327,15 @@ def deepspeed_train(base_model, dataloader):
     parser = deepspeed.add_config_arguments(parser)
     args = parser.parse_args()
     print(args)
-    for i in range(30, 35, 1):
+    for i in range(75, 90, 10):
         st = timer()
         torch.cuda.empty_cache()
         mod = get_model_stack(i, base_model)
         print("\n\n\n\n\n\n\n\n\n")
         print("Testing stack of {} encoders".format(i))
         print("Parameters: {}".format(sum(p.numel() for p in mod.parameters())))
+
+        print("\n\n\n\n\n\n\n\n\n")
         print(mod)
         model_engine, optimizer, _, _ = deepspeed.initialize(args, model=mod,optimizer = torch.optim.SGD(mod.parameters(), lr=0.0001))
         
@@ -362,18 +363,19 @@ def deepspeed_train_with_checkpointing(base_model, dataloader):
     parser = deepspeed.add_config_arguments(parser)
     args = parser.parse_args()
     print(args)
-    for i in range(50, 75, 1):
+    for i in range(100, 300, 10):
         st = timer()
         torch.cuda.empty_cache()
-        mod = CheckPointedModel(get_model_stack_for_checkpoint(i, base_model), i)
-        print("\n\n\n\n\n\n\n\n\n")
-        print("Testing stack of {} encoders".format(i))
-        print("Parameters: {}".format(sum(p.numel() for p in mod.parameters())))
-        print(mod)
+        with deepspeed.zero.Init():
+           mod = CheckPointedModel(get_model_stack_for_checkpoint(i, base_model), i)
+           print("\n\n\n\n\n\n\n\n\n")
+           print("Testing stack of {} encoders".format(i))
+           print("Parameters: {}".format(sum(p.numel() for p in mod.parameters())))
+           print(mod)
         model_engine, optimizer, _, _ = deepspeed.initialize(args, model=mod,optimizer = torch.optim.SGD(mod.parameters(), lr=0.0001))
         
+        deepspeed.checkpointing.configure(None, "scaling_ds_infinite.json", partition_activations=True, checkpoint_in_cpu=True)  
         sample, label = next(iter(dataloader))
-        model_engine = model_engine.to("cuda:0")
         sample = sample.to("cuda:0")
         sample = sample.type(torch.float32)
         sample.requires_grad_(True)
@@ -393,12 +395,12 @@ def deepspeed_train_with_checkpointing(base_model, dataloader):
         print("TIME: {}".format(end-st))
         
 def hydra_train(base_model, dataloader):
-    mod = get_model_stack(400, base_model)
+    mod = get_model_stack(250, base_model)
     print("Parameters: {}".format(sum(p.numel() for p in mod.parameters())))
     task = ModelTask("test", mod, pretraining_loss, dataloader, 0.0001, 1)
     orchestra = ModelOrchestrator([task])
     orchestra.verbose = 1
-    orchestra.buffer = 10000
+    orchestra.buffer = 55000
     orchestra.generate()
     orchestra.train_models()
         
