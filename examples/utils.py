@@ -36,6 +36,8 @@ from datetime import datetime
 tokenizer = GPT2Tokenizer.from_pretrained('gpt2') #gpt2-medium
 if tokenizer.pad_token is None:
     tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+    
+
 
 def load_dataset(path=".data/wikitext-2/wiki.test.tokens", combine=50000):
     paths = []
@@ -78,6 +80,14 @@ def load_dataset(path=".data/wikitext-2/wiki.test.tokens", combine=50000):
 def collate_batch(batch):
     batch = torch.stack([torch.as_tensor(b) for b in batch], 0)
     return batch, batch.clone()
+
+def get_data_set( context_length=1024):
+    data = lazy_load()[0]
+    # Chunk data by context_length
+    ds = Subset(data, [
+        slice(i, i+context_length) 
+        for i in range(0, len(data) - (len(data) % context_length), context_length)])
+    return ds
 
 
 def get_data_loader(batch_size, context_length=1024):
@@ -153,6 +163,15 @@ def get_data_loader_train(batch_size, context_length=1024):
 
     return data_loader
 
+
+def get_data_set_train(context_length=1024):
+    data = lazy_load_train()[0]
+    # Chunk data by context_length
+    ds = Subset(data, [
+        slice(i, i+context_length) 
+        for i in range(0, len(data) - (len(data) % context_length), context_length)])
+    return ds
+
 def lazy_load_train():
     cache_path = 'cache_path_train.npz'
     if not os.path.exists(cache_path):
@@ -183,8 +202,7 @@ def pretraining_loss(lm_logits, labels):
     shift_logits = shift_logits.view(-1, shift_logits.size(-1))
     shift_labels = labels[..., 1:].contiguous()
     shift_labels = shift_labels.view(-1)
-    print(shift_logits.size())
-    print(shift_labels.size())
+    
     loss_fct = CrossEntropyLoss()
     loss = loss_fct(shift_logits, shift_labels)
     return loss

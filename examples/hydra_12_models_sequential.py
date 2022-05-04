@@ -17,8 +17,8 @@
 from utils import get_data_loader, get_data_loader_train, pretraining_loss, get_sequential_model, set_random_seed
 import argparse
 from hydra import ModelOrchestrator, ModelTask
-from thop import profile, clever_format
 import torch
+from deepspeed.profiling.flops_profiler import FlopsProfiler
 
 
 def run_test(model):
@@ -39,7 +39,7 @@ def run_test(model):
     return math.exp(accum_loss/ctr)
 
 def report_flops(model, sample):
-    macs, params = profile(model, inputs=(sample, ))
+    macs, params = get_model_profile(model=model, input_res=sample.shape)
     print("PARAMETERS: {}".format(params))
     return 2 * macs / (1000 ** 3)
             
@@ -51,28 +51,33 @@ def main(seed):
     lr_names = ["3e-4", "1e-4", "5e-5"]
     
     learning_rates = [3e-4, 1e-4, 5e-5]
-    learning_rates = [3e-4]
+    learning_rates=[3e-4]
     batch_sizes = [1, 2, 4, 8]
-    batch_sizes=[1]
+    batch_sizes=[4]
+    profilers = []
     for idx, lr in enumerate(learning_rates):
         for b_size in batch_sizes:
-            dataloader = get_data_loader_train(b_size)
+            dataloader = get_data_loader(b_size)
             all_dataloaders.append(dataloader)
             new_model = get_sequential_model()
             all_models.append(new_model)
+            profilers.append(FlopsProfiler(new_model))
             task = ModelTask("MODEL_{}_{}".format(lr_names[idx], b_size), new_model, pretraining_loss, dataloader, lr, 1)
             all_tasks.append(task)
         
         
-
+    
     orchestra = ModelOrchestrator(all_tasks)
     orchestra.verbose = 1
     orchestra.buffer = 12000
     orchestra.generate()
-
+    for p in profilers:
+        p.start_profile()
     time = orchestra.train_models()
+    for prof in profilers:
+        prof.print_model_profile()
+        prof.end_profile()
 
-    
     lowest_score = 1000000000
     best_model = None
     best_idx = -1

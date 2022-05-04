@@ -226,10 +226,6 @@ def get_model():
     
     
 class CustomTrainer(Trainer):
-    def get_train_dataloader(self):
-        return get_data_loader_train(2)
-    def get_test_dataloader(self):
-        return get_data_loader(2)
     def compute_loss(self, model, inputs, return_outputs=False):
         labels = inputs[1]
         sample = inputs[0]

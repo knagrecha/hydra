@@ -439,7 +439,6 @@ class DebuggerGPT2Model(GPT2PreTrainedModel):
         hidden_states = self.drop(hidden_states)
         
         output_shape = input_shape + (hidden_states.size(-1),) # important - will change every iter
-        print(output_shape)
         for block in self.h:
     
             hidden_states = block(
@@ -463,8 +462,6 @@ class GPT2EmbeddingLayer(nn.Module):
 
 
         device = input_ids.device
-        print("DEVICE: {}".format(device))
-
         past_length = 0
 
         position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
