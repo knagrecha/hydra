@@ -29,6 +29,7 @@ import sys
 import signal
 from torch import multiprocessing
 import traceback
+
 global_timer = timer()
 thread_lock = threading.Lock()
 
@@ -358,4 +359,5 @@ class ModelOrchestrator():
      
         end = timer()
         print("TOTAL TIME TAKEN: {}".format(end - start))
+        return (end-start)
         

@@ -275,7 +275,7 @@ def main():
     orchestra.generate()
     orchestra.train_models()
     
-    print("==========SEQUENTIALIZED MODEL!!!========")
+    
     valid_loader = get_data_loader(2)
     ctr = 0
     with torch.no_grad():

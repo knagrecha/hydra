@@ -14,6 +14,7 @@
 from hydra.utilities import delete_batch, move_batch_to_device
 import torch
 
+
 """
     Generic Backward Pass module. Any back-pass module
     must support these inputs (they can be discarded if unnecessary)

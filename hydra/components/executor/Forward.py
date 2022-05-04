@@ -13,6 +13,7 @@
 
 from hydra.utilities import delete_batch, move_batch_to_device
 import torch
+
 """
     Generic Forward pass module. Must take as input the model, device, and batch.
     Returns output batch.
