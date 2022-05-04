@@ -33,7 +33,7 @@ import glob
 from datetime import datetime
 
 
-tokenizer = GPT2Tokenizer.from_pretrained('gpt2-xl') #gpt2-medium
+tokenizer = GPT2Tokenizer.from_pretrained('gpt2') #gpt2-medium
 if tokenizer.pad_token is None:
     tokenizer.add_special_tokens({'pad_token': '[PAD]'})
 
@@ -191,19 +191,20 @@ def pretraining_loss(lm_logits, labels):
 
 
 def get_base_model():
-    configuration = GPT2Config.from_pretrained('gpt2-xl', output_hidden_states=False)
-    model = DebuggerGPT2LMHeadModel.from_pretrained("gpt2-xl", config=configuration)
+    configuration = GPT2Config.from_pretrained('gpt2', output_hidden_states=False)
+    model = DebuggerGPT2LMHeadModel.from_pretrained("gpt2", config=configuration)
     params = sum(p.numel() for p in model.parameters())
     model.resize_token_embeddings(len(tokenizer))
     return model
 
 def get_sequential_model():
-    configuration = GPT2Config.from_pretrained('gpt2-xl', output_hidden_states=False)
-    model = DebuggerGPT2LMHeadModel.from_pretrained("gpt2-xl", config=configuration)
+    configuration = GPT2Config.from_pretrained('gpt2', output_hidden_states=False)
+    model = DebuggerGPT2LMHeadModel.from_pretrained("gpt2", config=configuration)
     modules = [GPT2EmbeddingLayer(model.transformer.wte, model.transformer.wpe, model.transformer.drop)]
     for mod in model.transformer.h:
         modules.append(mod)
     modules.append(GPT2OutputLayer(model.transformer.ln_f))
+    modules.append(model.lm_head)
     params = sum(p.numel() for p in model.parameters())
     model.resize_token_embeddings(len(tokenizer))
     return nn.Sequential(*modules)
