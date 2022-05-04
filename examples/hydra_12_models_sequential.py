@@ -51,7 +51,7 @@ def main(seed):
     lr_names = ["3e-4", "1e-4", "5e-5"]
     
     learning_rates = [3e-4, 1e-4, 5e-5]
-    learning_rates=[3e-4]
+    learning_rates=[3e-4, 1e-4]
     batch_sizes = [1, 2, 4, 8]
     batch_sizes=[4]
     profilers = []
