@@ -57,8 +57,8 @@ def main(seed):
     lr_names = ["3e-4", "1e-4", "5e-5"]
     learning_rates = [3e-4, 1e-4, 5e-5]
     learning_rates=[3e-4]
-    batch_sizes = [1, 2, 4, 8]
-    batch_sizes=[1]
+    batch_sizes = [8, 16]
+    batch_sizes=[8]
     for idx, lr in enumerate(learning_rates):
         for b_size in batch_sizes:
             new_model = get_base_model()
@@ -80,7 +80,7 @@ def main(seed):
     
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('seed', type=int)
+    parser.add_argument('--seed', type=int)
     parser.add_argument('--local_rank', type=int)
     args = parser.parse_args()
     main(args.seed)
