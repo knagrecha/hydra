@@ -48,10 +48,10 @@ def main(seed):
     all_tasks = []
     all_models = []
     all_dataloaders = []
-    lr_names = ["3e-4", "1e-4", "5e-5", "6e-5"]
-    learning_rates = [3e-4, 1e-4, 5e-5, 6e-5]
-    batch_sizes = [16, 12, 8]
-rofilers = []
+    lr_names = ["3e-4", "1e-4", "5e-5", "6e-5", "1e-5", "2e-5"]
+    learning_rates = [3e-4, 1e-4, 5e-5, 6e-5, 1e-5, 2e-5]
+    batch_sizes = [16, 8]
+    
     for idx, lr in enumerate(learning_rates):
         for b_size in batch_sizes:
             print("GENERATING MODEL {}, {}".format(lr, b_size))
@@ -59,7 +59,6 @@ rofilers = []
             all_dataloaders.append(dataloader)
             new_model = get_sequential_model()
             all_models.append(new_model)
-            profilers.append(FlopsProfiler(new_model))
             task = ModelTask("MODEL_{}_{}".format(lr_names[idx], b_size), new_model, pretraining_loss, dataloader, lr, 1)
             all_tasks.append(task)
         
@@ -67,14 +66,9 @@ rofilers = []
     
     orchestra = ModelOrchestrator(all_tasks)
     orchestra.verbose = 1
-    orchestra.buffer = 17000
+    orchestra.buffer = 13000
     orchestra.generate()
-    for p in profilers:
-        p.start_profile()
     time = orchestra.train_models()
-    for prof in profilers:
-        prof.print_model_profile()
-        prof.end_profile()
 
     lowest_score = 1000000000
     best_model = None
@@ -93,6 +87,6 @@ rofilers = []
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('seed', type=int)
+    parser.add_argument('--seed', type=int)
     args = parser.parse_args()
     main(args.seed)

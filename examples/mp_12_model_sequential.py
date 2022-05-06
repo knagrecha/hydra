@@ -55,7 +55,7 @@ def main(seed):
             new_model = get_sequential_model()
             sample, _ = next(iter(d_set))
             balance = [4, 7, 7, 7, 8, 7, 7, 4] # the automatic balancers OOM at b_size 16. This one works though
-            new_model = GPipe(new_model, balance=balance, chunks=torch.cuda.device_count())
+            new_model = GPipe(new_model, balance=balance, chunks=1) # remember that setting minibatch count to 1 is equivalent to naive model parallel. We let checkpointing stay
             optimizer = torch.optim.SGD(new_model.parameters(), lr = lr)
             total_len = len(d_set)
             ctr = 0

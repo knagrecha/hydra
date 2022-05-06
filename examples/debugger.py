@@ -477,7 +477,7 @@ class GPT2OutputLayer(nn.Module):
     def __init__(self, ln_f):
         super().__init__()
         self.ln_f = ln_f
-        self.output_shape = (-1, 1024, 1600) # manually set/fix this
+        self.output_shape = (-1, 512, 1600) # manually set/fix this
     def forward(self, hidden_states):
         hidden_states = self.ln_f(hidden_states)
         return hidden_states.view(self.output_shape)
