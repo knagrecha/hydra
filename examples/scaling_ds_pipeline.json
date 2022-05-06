@@ -17,21 +17,25 @@
         "allgather_partitions": true,
         "allgather_bucket_size": 1e8,
         "reduce_scatter": true,
-        "reduce_bucket_size": 1e8,
-        "stage3_prefetch_bucket_size": 5e8,
-        "stage3_param_persistence_threshold": 1e6,
-        "stage3_max_live_parameters": 1e9,
-        "stage3_max_reuse_distance": 1e9
+        "reduce_bucket_size": 1e8
     },
     "fp16": {
         "enabled": false
     },
-"train_batch_size": 2,  
-"gradient_accumulation_steps": 1,
+    "train_micro_batch_size_per_gpu": 4,
+    "gradient_accumulation_steps": 1,
     "optimizer": {
     "type": "SGD",
     "params": {
       "lr": 0.0001
     }
-  }
+  },
+  "activation_checkpointing": {
+    "partition_activations": true,
+    "cpu_checkpointing": true,
+    "contiguous_memory_optimization": true,
+    "number_checkpoints": 4,
+    "synchronize_checkpoint_boundary": true,
+    "profile": false
+    }
 }

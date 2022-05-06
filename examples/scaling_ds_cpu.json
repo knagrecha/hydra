@@ -15,13 +15,13 @@
         "contiguous_gradients": true,
         "sub_group_size": 1e9,
         "allgather_partitions": true,
-        "allgather_bucket_size": 1e8,
+        "allgather_bucket_size": 2e8,
         "reduce_scatter": true,
-        "reduce_bucket_size": 1e8,
+        "reduce_bucket_size": 2e8,
         "stage3_prefetch_bucket_size": 5e8,
         "stage3_param_persistence_threshold": 1e6,
-        "stage3_max_live_parameters": 1e9,
-        "stage3_max_reuse_distance": 1e9
+        "stage3_max_live_parameters": 2e9,
+        "stage3_max_reuse_distance": 2e9
     },
     "fp16": {
         "enabled": false

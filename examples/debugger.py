@@ -314,7 +314,7 @@ class GPT2MLP(nn.Module):
 
 
 
-class GPT2Block(nn.Module):
+class GPT2ModelPipe(nn.Module):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         hidden_size = config.hidden_size
@@ -397,7 +397,7 @@ class DebuggerGPT2Model(GPT2PreTrainedModel):
         self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
 
         self.drop = nn.Dropout(config.embd_pdrop)
-        self.h = nn.ModuleList([GPT2Block(config, layer_idx=i) for i in range(config.num_hidden_layers)])
+        self.h = nn.ModuleList([GPT2ModelPipe(config, layer_idx=i) for i in range(config.num_hidden_layers)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
 
@@ -477,7 +477,7 @@ class GPT2OutputLayer(nn.Module):
     def __init__(self, ln_f):
         super().__init__()
         self.ln_f = ln_f
-        self.output_shape = (-1, 1024, 768) # manually set/fix this
+        self.output_shape = (-1, 1024, 1600) # manually set/fix this
     def forward(self, hidden_states):
         hidden_states = self.ln_f(hidden_states)
         return hidden_states.view(self.output_shape)

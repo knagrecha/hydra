@@ -39,39 +39,25 @@ from torchgpipe.balance import balance_by_time
 
 from utils import get_data_loader, get_data_loader_train, pretraining_loss, get_sequential_model, set_random_seed, collate_batch
 
-tokenizer = GPT2Tokenizer.from_pretrained('gpt2') #gpt2-medium
-if tokenizer.pad_token is None:
-    tokenizer.add_special_tokens({'pad_token': '[PAD]'})
-
-
-class CustomTrainer(Trainer):
-    def compute_loss(self, model, inputs, return_outputs=False):
-        sample, label = inputs
-        outputs = model(sample)
-        loss = pretraining_loss(outputs, label)
-        return (loss, outputs) if return_outputs else loss
-
             
 def main(seed):
     set_random_seed(seed)
     
-    deepspeed.init_distributed()
     lr_names = ["3e-4", "1e-4", "5e-5"]
     learning_rates = [3e-4, 1e-4, 5e-5]
-    learning_rates=[3e-4]
-    batch_sizes = [1, 2, 4, 8]
-    batch_sizes=[1]
+    batch_sizes = [16, 12, 8]
     for idx, lr in enumerate(learning_rates):
         for b_size in batch_sizes:
             d_set = get_data_loader(b_size)
             new_model = get_sequential_model()
-            sample = next(iter(d_set))
+            sample, _ = next(iter(d_set))
             balance = balance_by_time(torch.cuda.device_count(), new_model, sample)
-            new_model = GPipe(new_model, balance, torch.cuda.device_count() // 2)
+            new_model = GPipe(new_model, balance=balance, chunks=torch.cuda.device_count())
             optimizer = torch.optim.SGD(new_model.parameters(), lr = lr)
             for sample, label in d_set:
+                print("TRAINING STARiTS")
                 sample = sample.to(new_model.devices[0])
-                label = label.to(new_model.device[-1])
+                label = label.to(new_model.devices[-1])
                 out = new_model(sample)
                 loss = pretraining_loss(out, label)
                 loss.backward()

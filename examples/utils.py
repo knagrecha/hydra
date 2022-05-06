@@ -87,7 +87,7 @@ def ds_collate_batch(batch):
     return {"input_ids": batch, "labels": batch.clone()}
 
 
-def get_data_set( context_length=512):
+def get_data_set( context_length=1024):
     data = lazy_load()[0]
     # Chunk data by context_length
     ds = Subset(data, [
@@ -96,7 +96,7 @@ def get_data_set( context_length=512):
     return ds
 
 
-def get_data_loader(batch_size, context_length=512):
+def get_data_loader(batch_size, context_length=1024):
     data = lazy_load()[0]
     # Chunk data by context_length
     ds = Subset(data, [
@@ -159,7 +159,7 @@ def load_dataset_train(path=".data/wikitext-2/wiki.train.tokens", combine=50000)
 
 
 
-def get_data_loader_train(batch_size, context_length=512):
+def get_data_loader_train(batch_size, context_length=1024):
     data = lazy_load_train()[0]
     # Chunk data by context_length
     ds = Subset(data, [
@@ -170,7 +170,7 @@ def get_data_loader_train(batch_size, context_length=512):
     return data_loader
 
 
-def get_data_set_train(context_length=512):
+def get_data_set_train(context_length=1024):
     data = lazy_load_train()[0]
     # Chunk data by context_length
     ds = Subset(data, [

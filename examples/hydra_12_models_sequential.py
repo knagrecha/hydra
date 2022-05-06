@@ -48,15 +48,13 @@ def main(seed):
     all_tasks = []
     all_models = []
     all_dataloaders = []
-    lr_names = ["3e-4", "1e-4", "5e-5"]
-    
-    learning_rates = [3e-4, 1e-4, 5e-5]
-    learning_rates=[3e-4, 1e-4]
-    batch_sizes = [1, 2, 4, 8]
-    batch_sizes=[4]
-    profilers = []
+    lr_names = ["3e-4", "1e-4", "5e-5", "6e-5"]
+    learning_rates = [3e-4, 1e-4, 5e-5, 6e-5]
+    batch_sizes = [16, 12, 8]
+rofilers = []
     for idx, lr in enumerate(learning_rates):
         for b_size in batch_sizes:
+            print("GENERATING MODEL {}, {}".format(lr, b_size))
             dataloader = get_data_loader(b_size)
             all_dataloaders.append(dataloader)
             new_model = get_sequential_model()

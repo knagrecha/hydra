@@ -45,13 +45,11 @@ if tokenizer.pad_token is None:
             
 def main(seed):
     set_random_seed(seed)
-    dataset = get_data_set()
-    
-    lr_names = ["3e-4", "1e-4", "5e-5"]
-    learning_rates = [3e-4, 1e-4, 5e-5]
-    learning_rates=[3e-4]
-    batch_sizes = [8, 16]
-    batch_sizes=[8]
+    dataset = get_data_set_train()
+    lr_names = ["3e-4", "1e-4", "5e-5", "6e-5"]
+    learning_rates = [3e-4, 1e-4, 5e-5, 6e-5]
+    batch_sizes = [16, 12, 8]
+
     for idx, lr in enumerate(learning_rates):
         for b_size in batch_sizes:
             new_model = get_base_model()

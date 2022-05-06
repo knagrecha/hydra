@@ -39,33 +39,19 @@ from deepspeed.pipe import PipelineModule
 
 from utils import get_data_set, get_data_set_train, pretraining_loss, get_sequential_model, set_random_seed, collate_batch
 import deepspeed
-tokenizer = GPT2Tokenizer.from_pretrained('gpt2') #gpt2-medium
-if tokenizer.pad_token is None:
-    tokenizer.add_special_tokens({'pad_token': '[PAD]'})
-
-
-class CustomTrainer(Trainer):
-    def compute_loss(self, model, inputs, return_outputs=False):
-        sample, label = inputs
-        outputs = model(sample)
-        loss = pretraining_loss(outputs, label)
-        return (loss, outputs) if return_outputs else loss
-
             
 def main(seed):
     set_random_seed(seed)
     
     deepspeed.init_distributed()
-    lr_names = ["3e-4", "1e-4", "5e-5"]
-    learning_rates = [3e-4, 1e-4, 5e-5]
-    learning_rates=[3e-4]
-    batch_sizes = [1, 2, 4, 8]
-    batch_sizes=[1]
+    lr_names = ["3e-4", "1e-4", "5e-5", "6e-5"]
+    learning_rates = [3e-4, 1e-4, 5e-5, 6e-5]
+    batch_sizes = [16, 12, 8]
     for idx, lr in enumerate(learning_rates):
         for b_size in batch_sizes:
             d_set = get_data_set_train()
             new_model = get_sequential_model()
-            new_model = PipelineModule(layers=new_model, num_stages=torch.cuda.device_count(), loss_fn=pretraining_loss)
+            new_model = PipelineModule(layers=new_model, num_stages=torch.cuda.device_count(), loss_fn=pretraining_loss, activation_checkpoint_interval = 1, base_seed = seed)
             engine, _, _, _ = deepspeed.initialize(
                 args=args,
                 model=new_model,
