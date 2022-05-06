@@ -69,7 +69,7 @@ def main(seed):
     
     orchestra = ModelOrchestrator(all_tasks)
     orchestra.verbose = 1
-    orchestra.buffer = 12000
+    orchestra.buffer = 17000
     orchestra.generate()
     for p in profilers:
         p.start_profile()

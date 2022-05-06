@@ -33,7 +33,7 @@ import glob
 from datetime import datetime
 
 
-tokenizer = GPT2Tokenizer.from_pretrained('gpt2') #gpt2-medium
+tokenizer = GPT2Tokenizer.from_pretrained('gpt2-xl') #gpt2-medium
 if tokenizer.pad_token is None:
     tokenizer.add_special_tokens({'pad_token': '[PAD]'})
     
@@ -80,6 +80,12 @@ def load_dataset(path=".data/wikitext-2/wiki.test.tokens", combine=50000):
 def collate_batch(batch):
     batch = torch.stack([torch.as_tensor(b) for b in batch], 0)
     return batch, batch.clone()
+
+
+def ds_collate_batch(batch):
+    batch = torch.stack([torch.as_tensor(b) for b in batch], 0)
+    return {"input_ids": batch, "labels": batch.clone()}
+
 
 def get_data_set( context_length=512):
     data = lazy_load()[0]
@@ -209,16 +215,17 @@ def pretraining_loss(lm_logits, labels):
 
 
 def get_base_model():
-    configuration = GPT2Config.from_pretrained('gpt2', output_hidden_states=False)
-    model = DebuggerGPT2LMHeadModel.from_pretrained("gpt2", config=configuration)
+    configuration = GPT2Config.from_pretrained('gpt2-xl', output_hidden_states=False)
+    configuration.gradient_checkpointing = True
+    configuration.use_cache = False
+    model = GPT2LMHeadModel.from_pretrained("gpt2-xl", config=configuration)
     params = sum(p.numel() for p in model.parameters())
     model.resize_token_embeddings(len(tokenizer))
     return model
 
 def get_sequential_model():
-    configuration = GPT2Config.from_pretrained('gpt2', output_hidden_states=False)
-    configuration["n_ctx"] = 512 
-    model = DebuggerGPT2LMHeadModel.from_pretrained("gpt2", config=configuration)
+    configuration = GPT2Config.from_pretrained('gpt2-xl', output_hidden_states=False)
+    model = DebuggerGPT2LMHeadModel.from_pretrained("gpt2-xl", config=configuration)
     modules = [GPT2EmbeddingLayer(model.transformer.wte, model.transformer.wpe, model.transformer.drop)]
     for mod in model.transformer.h:
         modules.append(mod)
