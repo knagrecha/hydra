@@ -76,13 +76,43 @@ class Presharded():
             while partitioning_index < partition:                    
                 partitioned_layers.append(all_layers[partitioning_index])
                 partitioning_index += 1
+            start_f = timer() # used for schduler
             model = ShardModel(nn.ModuleList(partitioned_layers)) # Create a shard-model
+            model.to(self.selected_device)
+            shard_batch_input = move_batch_to_device(shard_batch_input, self.selected_device)
+            out = model(shard_batch_input)
+            end_f = timer()
+            start_b = timer() # used for scheduler
+            gradients = out.detach().clone()
+            torch.autograd.backward(out, gradients)
+            model.zero_grad()
+                        
+            del gradients
+            for p in model.parameters():
+                if p.grad is not None:
+                    del p.grad  # free some memory
+            model.cpu()  # this is an inplace operation
+
+            end_b = timer()
+                        
+                        
+            if not (isinstance(out, torch.Tensor)):
+                shard_batch_input = [x.cpu().detach().clone() for x in out]
+            else:
+                shard_batch_input = out.cpu().detach().clone()
+            del out
+                        
             params = sum(p.numel() for p in model.parameters())
             print("NEW SHARD - {} PARAMETERS".format(params))
-            forward_shards.append(ShardedTask(model, Forward(idx), "f", 15.2, idx, lr))
-            backward_shards.append(ShardedTask(model, Backward(idx), "b", 30.1, idx, lr))
+            forward_shards.append(ShardedTask(model, Forward(idx), "f", end_f-start_f, idx, lr))
+            backward_shards.append(ShardedTask(model, Backward(idx), "b", end_b-start_b, idx, lr))
+
+            total_time = total_time + (end_f - start_f) + (end_b - start_b)
             partitioned_layers = []
-        total_time = 45.3
+            torch.cuda.empty_cache() # not necessary, just makes memory debugging easier to view
+            if verbose == 1:
+                print("Free Memory: {}".format(get_free_space(self.selected_device_index)))
+
         if verbose == 1:
             print("==============Number of Shards: {}======================".format(len(forward_shards)))
             print("=======Anticipated Minibatch Times: {:.2f}s=======".format(total_time))

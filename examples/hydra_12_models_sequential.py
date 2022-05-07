@@ -18,7 +18,6 @@ from utils import get_data_loader, get_data_loader_train, pretraining_loss, get_
 import argparse
 from hydra import ModelOrchestrator, ModelTask
 import torch
-from deepspeed.profiling.flops_profiler import FlopsProfiler
 from hydra.components.partitioner import Presharded
 
 def run_test(model):
@@ -51,11 +50,11 @@ def main(seed):
     lr_names = ["3e-4", "1e-4", "5e-5", "6e-5", "1e-5", "2e-5"]
     learning_rates = [3e-4, 1e-4, 5e-5, 6e-5, 1e-5, 2e-5]
     batch_sizes = [16, 8]
-    partitioner_16 = Presharded([3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39, 42, 45, 48, 51]) # provides partitioning strategy. Not necessary, just don't pass it
+    partitioner_16 = Presharded([3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39, 42, 45, 48, 50, 51]) # provides partitioning strategy. Not necessary, just don't pass it
                                                                                                                                 # and pilot partitioning occurs instead. I already ran a Pilot pass 
                                                                                                                                 # and got these divides.
 
-    partitioner_8  = Presharded([7, 14, 21, 28, 35, 42, 49, 51])
+    partitioner_8  = Presharded([6, 12, 18, 24, 30, 36, 42, 48, 51])
     for idx, lr in enumerate(learning_rates):
         for b_size in batch_sizes:
             print("GENERATING MODEL {}, {}".format(lr, b_size))
