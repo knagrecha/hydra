@@ -40,6 +40,7 @@ class ShardedTask():
         self.executor = executor
     
     def run(self, arg_list):
+        print("SHARD {} RUNS {}".format(self.idx, self.direction))
         if self.executor.type != "Forward":
             return self.executor.run(self.model, self.optimizer, *arg_list)
         else:

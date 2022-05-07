@@ -11,28 +11,27 @@
 # limitations under the License.
 # ==============================================================================
 
-from hydra.utilities import delete_batch, move_batch_to_device
+import torch.nn as nn
+from hydra.utilities import get_free_space
+
+import gc
+
 import torch
 
 """
-    Generic Forward pass module. Must take as input the model, device, and batch.
-    Returns output batch.
+    This is the PyTorch module that wraps model layers to form a model shard.
+    It runs a simple pass through the layers in sequence.
 
 """
 
-class Forward():
-    def __init__(self, idx):
-        self.type="Forward"
-        self.idx = idx
 
-    def run(self, model, batch_input, device):
-        model.to(device, non_blocking=True)
-
-        batch_input = move_batch_to_device(batch_input, device)
+class CheckpointedShardModel(nn.Module):
+    def __init__(self, layers):
+        self.layers = layers
+        super(CheckpointedShardModel, self).__init__()
         
-        with torch.no_grad() and torch.cuda.amp.autocast():
-            ns_labels = model(batch_input)
+        for idx, layer in enumerate(layers):
+            self.add_module("Module_{}".format(idx), layer)
 
-        delete_batch(batch_input)
-            
-        return ns_labels
+    def forward(self, x):
+        return torch.utils.checkpoint.checkpoint_sequential(self.layers, len(self.layers), x)
