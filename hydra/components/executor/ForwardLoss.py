@@ -29,12 +29,10 @@ class ForwardLoss():
 
     def run(self, model, optimizer, batch_input, labels, criterion, device, scaler=None):
 
-        old = next(model.parameters()).device
+       
         model.to(device, non_blocking=True)
         batch_input = move_batch_to_device(batch_input, device)
-        
-        model.zero_grad()  # zeroes the gradient buffers of all parameters
-        optimizer.zero_grad()  # zero the gradient buffers
+       
         
         labels = move_batch_to_device(labels, device)
         
@@ -73,9 +71,9 @@ class ForwardLoss():
             scaler.update()
         else:
             optimizer.step()
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
 
-        model.zero_grad()
+        model.zero_grad(set_to_none=True)
 
         #shard_model = shard.model.to("cpu", non_blocking=True)
 
