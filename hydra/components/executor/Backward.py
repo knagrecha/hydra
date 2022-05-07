@@ -29,9 +29,6 @@ class Backward():
     def run(self, model, optimizer, batch_input, device, back_input, scaler=None):
         
         model.to(device, non_blocking=True)
-        model.zero_grad()  # zeroes the gradient buffers of all parameters
-        optimizer.zero_grad()  # zero the gradient buffers
-        
         if not isinstance(back_input, torch.Tensor):
             toy_input = [x.to(device, non_blocking=True) for x in back_input]
             if self.idx != 0:
@@ -73,7 +70,7 @@ class Backward():
             scaler.update()
         else:
             optimizer.step()
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
 
 
         if not isinstance(toy_input, torch.Tensor):
@@ -83,7 +80,7 @@ class Backward():
         else:
             del toy_input
 
-        model.zero_grad()
+        model.zero_grad(set_to_none=True)
 
 
         return scaler, pass_back_gradients 
