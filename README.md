@@ -61,9 +61,8 @@ with an identity function, or else put into a single residual block.
 ### Multi-node
 The system is implemented for single-node, multi-GPU execution. We are working to implement multi-node execution.
 
-## NOTE
-
-This system is under development, it will likely change quite a bit in the coming weeks.
+## CUDA Optimizations
+We only use high-level PyTorch APIs for data transfer. While this helps with compatability as frameworks evolve, we're likely missing out on some major potential speedups for CPU-GPU optimization. In the future we plan to optimize this to enable better spilling performance.
 
 ## FAQs
 
