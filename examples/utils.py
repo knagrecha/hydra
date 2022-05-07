@@ -158,8 +158,19 @@ def load_dataset_train(path=".data/wikitext-2/wiki.train.tokens", combine=50000)
     return token_chunks
 
 
+def get_data_loader_hydra(batch_size, context_length=512):
+    data = lazy_load_train()[0]
+    # Chunk data by context_length
+    ds = Subset(data, [
+        slice(i, i+context_length) 
+        for i in range(0, len(data) - (len(data) % context_length), context_length)])
+    data_loader = DataLoader(ds, batch_size=batch_size, shuffle=False, collate_fn=collate_batch, pin_memory=True)
 
-def get_data_loader_train(batch_size, context_length=1024):
+    return data_loader
+
+
+
+def get_data_loader_train(batch_size, context_length=512):
     data = lazy_load_train()[0]
     # Chunk data by context_length
     ds = Subset(data, [
@@ -223,6 +234,31 @@ def get_base_model():
     params = sum(p.numel() for p in model.parameters())
     model.resize_token_embeddings(len(tokenizer))
     return model
+
+class ModuleWrapperIgnores2ndArg(nn.Module):
+    def __init__(self, module):
+        super().__init__()
+        self.module = module
+
+    def forward(self,x):
+        x = x.long()
+        x = self.module(x)
+        return x
+
+
+def get_ckpt_model():
+    configuration = GPT2Config.from_pretrained('gpt2-xl', output_hidden_states=False)
+    configuration.n_ctx = 512
+    model = DebuggerGPT2LMHeadModel.from_pretrained("gpt2-xl", config=configuration)
+    modules = [ModuleWrapperIgnores2ndArg(GPT2EmbeddingLayer(model.transformer.wte, model.transformer.wpe, model.transformer.drop))]
+    for mod in model.transformer.h:
+        modules.append(mod)
+    modules.append(GPT2OutputLayer(model.transformer.ln_f))
+    modules.append(model.lm_head)
+    params = sum(p.numel() for p in model.parameters())
+    model.resize_token_embeddings(len(tokenizer))
+    return nn.Sequential(*modules)
+
 
 def get_sequential_model():
     configuration = GPT2Config.from_pretrained('gpt2-xl', output_hidden_states=False)

@@ -38,7 +38,7 @@ from datetime import datetime
 from torchgpipe import GPipe
 from torchgpipe.balance import balance_by_time, balance_by_size
 from timeit import default_timer as timer
-from utils import get_data_loader, get_data_loader_train, pretraining_loss, get_sequential_model, set_random_seed, collate_batch
+from utils import get_data_loader, get_data_loader_train, pretraining_loss, get_ckpt_model, set_random_seed, collate_batch
 
             
 def main(seed):
@@ -46,37 +46,171 @@ def main(seed):
     
     lr_names = ["3e-4", "1e-4", "5e-5"]
     learning_rates = [3e-4, 1e-4, 5e-5]
-    batch_sizes = [16, 12, 8]
+    batch_sizes = [16, 8]
     summed_runtimes = 0
     
     for idx, lr in enumerate(learning_rates):
         for b_size in batch_sizes:
-            d_set = get_data_loader(b_size)
-            new_model = get_sequential_model()
-            sample, _ = next(iter(d_set))
-            balance = [4, 7, 7, 7, 8, 7, 7, 4] # the automatic balancers OOM at b_size 16. This one works though
-            new_model = GPipe(new_model, balance=balance, chunks=1) # remember that setting minibatch count to 1 is equivalent to naive model parallel. We let checkpointing stay
+            d_set = get_data_loader_train(b_size)
+            new_model = get_ckpt_model()
             optimizer = torch.optim.SGD(new_model.parameters(), lr = lr)
+            modules = []
+            boundaries = [5, 7, 7, 6, 7, 7, 7, 5]
+            children = list(new_model.children())
+            total_ctr = 0
+            assert sum(boundaries) == len(children)
+            
+            current_module = []
+            ctr = 0
+            while (ctr < boundaries[0]):
+                current_module.append(children[total_ctr])
+                ctr+=1
+                total_ctr+=1
+            modules.append(nn.Sequential(*current_module).to("cuda:0"))
+
+            current_module = []
+            ctr = 0
+            while (ctr < boundaries[1]):
+                current_module.append(children[total_ctr])
+                ctr+=1
+                total_ctr+=1
+            modules.append(nn.Sequential(*current_module).to("cuda:1"))
+
+
+            current_module = []
+            ctr = 0
+            while (ctr < boundaries[2]):
+                current_module.append(children[total_ctr])
+                ctr+=1
+                total_ctr+=1
+            modules.append(nn.Sequential(*current_module).to("cuda:2"))
+
+
+            current_module = []
+            ctr = 0
+            while (ctr < boundaries[3]):
+                current_module.append(children[total_ctr])
+                ctr+=1
+                total_ctr+=1
+            modules.append(nn.Sequential(*current_module).to("cuda:3"))
+
+            current_module = []
+            ctr = 0
+            while (ctr < boundaries[4]):
+                current_module.append(children[total_ctr])
+                ctr+=1
+                total_ctr+=1
+            modules.append(nn.Sequential(*current_module).to("cuda:4"))
+
+
+            current_module = []
+            ctr = 0
+            while (ctr < boundaries[5]):
+                current_module.append(children[total_ctr])
+                ctr+=1
+                total_ctr+=1
+            modules.append(nn.Sequential(*current_module).to("cuda:5"))
+            
+            current_module = []
+            ctr = 0
+            while (ctr < boundaries[6]):
+                current_module.append(children[total_ctr])
+                ctr+=1
+                total_ctr+=1
+            modules.append(nn.Sequential(*current_module).to("cuda:6"))
+
+            current_module = []
+            ctr = 0
+            while (ctr < boundaries[7]):
+                current_module.append(children[total_ctr])
+                ctr+=1
+                total_ctr+=1
+            modules.append(nn.Sequential(*current_module).to("cuda:7"))
+            total_sum = 0 
+            for mod in modules:
+                total_sum += len(list(mod.children()))
+            print("SUM: {}".format(total_sum))
             total_len = len(d_set)
             ctr = 0
             st = timer()
-            inner_timer = timer()
+            end = timer()
             for sample, label in d_set:
                 ctr+=1
-                time_taken = timer() - inner_timer
-                inner_timer = timer()
-                print("Time per iter: {}s | Estimated Total Runtime: {}".format(time_taken/ctr, time_taken/ctr * total_len), end='\r', flush=True) 
-                sample = sample.to(new_model.devices[0])
-                label = label.to(new_model.devices[-1])
-                out = new_model(sample)
-                loss = pretraining_loss(out, label)
+                optimizer_0 = torch.optim.SGD(modules[0].parameters(), lr = lr)
+                optimizer_1 = torch.optim.SGD(modules[1].parameters(), lr = lr)
+                optimizer_2 = torch.optim.SGD(modules[2].parameters(), lr = lr)
+                optimizer_3 = torch.optim.SGD(modules[3].parameters(), lr = lr)
+                optimizer_4 = torch.optim.SGD(modules[4].parameters(), lr = lr)
+                optimizer_5 = torch.optim.SGD(modules[5].parameters(), lr = lr)
+                optimizer_6 = torch.optim.SGD(modules[6].parameters(), lr = lr)
+                optimizer_7 = torch.optim.SGD(modules[7].parameters(), lr = lr)
+                print("{} / {} | Minibatch time: {}".format(ctr, total_len, timer()-end), end='\r', flush=True) 
+                end = timer()
+                sample = sample.to("cuda:0")
+                sample = sample.type(torch.float32)
+                sample.requires_grad_(True)
+                label = label.to("cuda:7")
+                sample_0 = torch.utils.checkpoint.checkpoint_sequential(modules[0], boundaries[0], sample)
+                sample_0 = sample_0.to("cuda:1")
+                sample_1 = torch.utils.checkpoint.checkpoint_sequential(modules[1], boundaries[1], sample_0)
+                sample_1 = sample_1.to("cuda:2")
+                sample_2 = torch.utils.checkpoint.checkpoint_sequential(modules[2], boundaries[2], sample_1)
+                sample_2 = sample_2.to("cuda:3")
+                sample_3 = torch.utils.checkpoint.checkpoint_sequential(modules[3], boundaries[3], sample_2)
+                sample_3 = sample_3.to("cuda:4")
+                sample_4 = torch.utils.checkpoint.checkpoint_sequential(modules[4], boundaries[4], sample_3)
+                sample_4 = sample_4.to("cuda:5")
+                sample_5 = torch.utils.checkpoint.checkpoint_sequential(modules[5], boundaries[5], sample_4)
+                sample_5 = sample_5.to("cuda:6")
+                sample_6 = torch.utils.checkpoint.checkpoint_sequential(modules[6], boundaries[6], sample_5)
+                sample_6 = sample_6.to("cuda:7")
+                sample_7 = torch.utils.checkpoint.checkpoint_sequential(modules[7], boundaries[7], sample_6)
+                loss = pretraining_loss(sample_7, label)
                 loss.backward()
-                optimizer.step()
-                optimizer.zero_grad()
+                optimizer_0.step()
+                optimizer_0.zero_grad()
+                optimizer_1.step()
+                optimizer_1.zero_grad()
+                optimizer_2.step()
+                optimizer_2.zero_grad()
+
+                optimizer_3.step()
+                optimizer_3.zero_grad()
+
+                optimizer_4.step()
+                optimizer_4.zero_grad()
+                optimizer_5.step()
+                optimizer_5.zero_grad()
+
+                optimizer_6.step()
+                optimizer_6.zero_grad()
+
+                optimizer_7.step()
+                optimizer_7.zero_grad()
+
+                for model in modules:
+                    model.zero_grad()
+                del optimizer_0
+                del optimizer_1
+                del optimizer_2
+                del optimizer_3
+                del optimizer_4
+                del optimizer_5
+                del optimizer_6
+                del optimizer_7
                 del loss
-                del out
                 del label
                 del sample
+                del sample_0
+                del sample_1
+                del sample_2
+                del sample_3
+                del sample_4
+                del sample_5
+                del sample_6
+                del sample_7
+                gc.collect()
+                torch.cuda.empty_cache()
 
             time_taken = timer() - st
             print("Time Taken: {}".format(time_taken)) 

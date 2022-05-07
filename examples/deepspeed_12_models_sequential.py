@@ -48,15 +48,15 @@ def main(seed):
     dataset = get_data_set_train()
     lr_names = ["3e-4", "1e-4", "5e-5", "6e-5", "1e-4", "2e-5"]
     learning_rates = [3e-4, 1e-4, 5e-5, 6e-5, 1e-5, 2e-5]
-    batch_sizes = [16, 8]
+    batch_sizes = [8, 16]
     summed_time = 0
     for idx, lr in enumerate(learning_rates):
         for b_size in batch_sizes:
+            st = timer()
             new_model = get_base_model()
             b_size_p_device = max(1, int(b_size / torch.cuda.device_count()))
             training_args = TrainingArguments(output_dir="./output/", learning_rate=lr, per_device_train_batch_size=b_size_p_device, deepspeed="scaling_ds_cpu.json", num_train_epochs=1)
             trainer = Trainer(new_model, args=training_args, train_dataset=dataset, data_collator=ds_collate_batch, optimizers=(torch.optim.SGD(new_model.parameters(), lr=lr), None))
-            st = timer()
             trainer.train()
             end = timer()
             summed_time += end-st

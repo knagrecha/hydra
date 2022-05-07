@@ -44,28 +44,28 @@ from utils import get_data_loader, get_data_loader_train, pretraining_loss, get_
 def main(seed):
     set_random_seed(seed)
     
-    lr_names = ["3e-4", "1e-4", "5e-5"]
-    learning_rates = [3e-4, 1e-4, 5e-5]
-    batch_sizes = [16, 12, 8]
+    
+    learning_rates = [3e-4, 1e-4, 5e-5, 6e-5, 1e-5, 2e-5]
+    batch_sizes = [16, 8]
     summed_runtimes = 0
     
     for idx, lr in enumerate(learning_rates):
         for b_size in batch_sizes:
-            d_set = get_data_loader(b_size)
+            d_set = get_data_loader_train(b_size)
+            st = timer()
             new_model = get_sequential_model()
             sample, _ = next(iter(d_set))
             balance = [4, 7, 7, 7, 8, 7, 7, 4] # the automatic balancers OOM at b_size 16. This one works though
-            new_model = GPipe(new_model, balance=balance, chunks=torch.cuda.device_count())
+            new_model = GPipe(new_model, balance=balance, chunks=4)
             optimizer = torch.optim.SGD(new_model.parameters(), lr = lr)
             total_len = len(d_set)
             ctr = 0
-            st = timer()
+            end = timer()
             inner_timer = timer()
             for sample, label in d_set:
                 ctr+=1
-                time_taken = timer() - inner_timer
-                inner_timer = timer()
-                print("Time per iter: {}s | Estimated Total Runtime: {}".format(time_taken/ctr, time_taken/ctr * total_len), end='\r', flush=True) 
+                print("{}/{} samples, last time: {}".format(ctr, total_len, timer()-end), end='\r', flush=True) 
+                end = timer()
                 sample = sample.to(new_model.devices[0])
                 label = label.to(new_model.devices[-1])
                 out = new_model(sample)
@@ -73,6 +73,7 @@ def main(seed):
                 loss.backward()
                 optimizer.step()
                 optimizer.zero_grad()
+                torch.cuda.empty_cache()
                 del loss
                 del out
                 del label

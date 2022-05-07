@@ -234,6 +234,8 @@ class ModelOrchestrator():
                 for i in considerables:
                     if (len(i.queue) > 0):
                         task_time = (i.total_time * i.batches_remaining ) + i.total_length * i.total_time * i.epochs
+                        if i == active_task:
+                            task_time += i.total_time * (i.total_length // 2) # prevents immediate swaps, give some preference to the training one
                         if task_time > lrt:
                             lrt = task_time
                             cache_task = i
@@ -299,9 +301,10 @@ class ModelOrchestrator():
                             self.cached_tasks[active_device] = None
                     
                         for i in cache_possibles:
-                            #print(len(i.queue))
                             if (len(i.queue) > 0):
                                 task_time = (i.total_time * i.batches_remaining ) + i.total_length * i.total_time * i.epochs
+                                if i == active_task:
+                                    task_time += i.total_time * (i.total_length // 2) # prevents immediate swaps, give some preference to the training one
                                 i.remaining_runtime = task_time
                                 if task_time > lrt:
                                     lrt = task_time
