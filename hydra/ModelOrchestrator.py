@@ -211,7 +211,7 @@ class ModelOrchestrator():
             self.thread_pool.submit(self.train_shard_on_device, chosen_task, chosen_shard, chosen_device)
         #print(self.active_devices)
         # recalculate cached shards
-        considerables = self.idle_tasks.copy()
+        considerables = self.idle_tasks[:]
         for active_device in temp_active:
             active_task = running_tasks[active_device]
             if (len(active_task.queue) > 0):
@@ -251,7 +251,7 @@ class ModelOrchestrator():
                     
                 temp_active = []
                 subt = timer()
-                holder = self.available_devices.copy() # avoid iterating over available devices, which is modified inside the loop
+                holder = self.available_devices[:] # avoid iterating over available devices, which is modified inside the loop
                 for chosen_device in holder:
                     chosen_task = self.cached_tasks[chosen_device]
                     if chosen_task is not None:
@@ -268,7 +268,7 @@ class ModelOrchestrator():
                 end = timer()
                 #print("Devices needing a cache {}".format(temp_active))
                 subt = timer()
-                considerables = self.idle_tasks.copy()
+                considerables = self.idle_tasks[:]
                 for active_device in temp_active:
                     active_task = running_tasks[active_device]
                     if (len(active_task.queue) > 0):
