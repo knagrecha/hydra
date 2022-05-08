@@ -49,13 +49,14 @@ def main(seed):
     all_dataloaders = []
     lr_names = ["3e-4", "1e-4", "5e-5", "6e-5", "1e-5", "2e-5"]
     learning_rates = [3e-4, 1e-4, 5e-5, 6e-5, 1e-5, 2e-5]
+    learning_rates=[3e-4, 1e-4, 5e-5]
     batch_sizes = [16, 8]
     partitioner_16 = Presharded([4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 51]) # provides partitioning strategy. Not necessary, just don't pass it
     partitioner_8  = Presharded([7, 14, 21, 28, 35, 42, 49, 51])
     for idx, lr in enumerate(learning_rates):
         for b_size in batch_sizes:
             print("GENERATING MODEL {}, {}".format(lr, b_size))
-            dataloader = get_data_loader_train(b_size)
+            dataloader = get_data_loader(b_size)
             all_dataloaders.append(dataloader)
             new_model = get_sequential_model()
             all_models.append(new_model)

@@ -33,7 +33,7 @@ import glob
 from datetime import datetime
 
 
-tokenizer = GPT2Tokenizer.from_pretrained('gpt2-xl') #gpt2-medium
+tokenizer = GPT2Tokenizer.from_pretrained('gpt2-xl') #gpt2-xl-medium
 if tokenizer.pad_token is None:
     tokenizer.add_special_tokens({'pad_token': '[PAD]'})
     

@@ -153,15 +153,15 @@ class ModelOrchestrator():
             if len(chosen_task.queue) == 0:
                 self.tasks.remove(chosen_task)
                 chosen_task.cleanup() # remove for production
+                print("Task {} has finished at time {}.".format(chosen_task.name, timer()-global_timer))
             else:
+                self.idle_tasks.append(chosen_task)
                 chosen_task.clear_settings()
 
-            #print("Task {} has finished at time {}.".format(chosen_task.name, timer()-global_timer))
             self.unlock_device(chosen)
             self.active_tasks.remove(chosen_task)
                
             
-            self.idle_tasks.append(chosen_task)
             
 
             profile_timer_end = timer()
@@ -255,18 +255,20 @@ class ModelOrchestrator():
                         chosen_shard = chosen_task.get_shard()
                         running_tasks[chosen_device] = chosen_task
                         temp_active.append(chosen_device)
+                        self.cached_tasks[chosen_device] = None
                         self.thread_pool.submit(self.train_shard_on_device, chosen_task, chosen_shard, chosen_device)
                     else:
                         task_times = [(i.total_time * i.batches_remaining) + i.total_length * i.total_time * i.epochs for i in self.idle_tasks]
-                        chosen_task = self.idle_tasks[np.argmax(task_times)]
-                        self.lock_device(chosen_device)
-                        chosen_task.setup_timing(chosen_device)
-                        self.active_tasks.append(chosen_task)
-                        running_tasks[chosen_device] = chosen_task
-                        chosen_shard = chosen_task.get_shard()
-                        temp_active.append(chosen_device)
-                        self.idle_tasks.remove(chosen_task)
-                        self.thread_pool.submit(self.train_shard_on_device, chosen_task, chosen_shard, chosen_device)
+                        if (len(task_times) > 0):
+                            chosen_task = self.idle_tasks[np.argmax(task_times)]
+                            self.lock_device(chosen_device)
+                            chosen_task.setup_timing(chosen_device)
+                            self.active_tasks.append(chosen_task)
+                            running_tasks[chosen_device] = chosen_task
+                            chosen_shard = chosen_task.get_shard()
+                            temp_active.append(chosen_device)
+                            self.idle_tasks.remove(chosen_task)
+                            self.thread_pool.submit(self.train_shard_on_device, chosen_task, chosen_shard, chosen_device)
 
                 considerables = self.idle_tasks[:]
                 for active_device in temp_active:
@@ -280,9 +282,9 @@ class ModelOrchestrator():
                     for i in considerables:
                         if (len(i.queue) > 0):
                             task_time = (i.total_time * i.batches_remaining ) + i.total_length * i.total_time * i.epochs
-                        if task_time > lrt:
-                            lrt = task_time
-                            cache_task = i
+                            if task_time > lrt:
+                                lrt = task_time
+                                cache_task = i
                     if cache_task is not None:
                         cache_task.queue[0].model.to("cuda:{0}".format(active_device), non_blocking=True)
                         if cache_task != active_task:
