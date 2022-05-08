@@ -144,22 +144,19 @@ class ModelTask():
             get_load_time(shard, a, device)
             self.list_of_waste.append(timer() - start)
             shard.model = shard.model.cpu()
-        print(self.list_of_waste)
         
         self.queue_len = len(self.queue)
      
     def setup_timing(self, device):
-        
         if (next(self.queue[0].model.parameters()).device == torch.device(device)):
-            self.anticipated_curr_shard_time = timer() - self.global_timer + self.queue[0].time_cost
             self.my_device = device
         else:
-            self.anticipated_curr_shard_time = timer() - self.global_timer + self.queue[0].time_cost + self.list_of_waste[self.curr_cycle]
             self.my_device = device
             
     def get_new_batch(self):
         self.last_runtime = timer()-self.last_mini_time
-        
+        if ((self.total_length - self.batches_remaining) % 1) == 0:
+            print("Model: {} | Batches Remaining: {} / {}".format(self.name, self.batches_remaining, self.total_length))
         try:
             batch_full = next(self.dataloader)
         except StopIteration:

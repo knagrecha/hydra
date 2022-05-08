@@ -50,11 +50,8 @@ def main(seed):
     lr_names = ["3e-4", "1e-4", "5e-5", "6e-5", "1e-5", "2e-5"]
     learning_rates = [3e-4, 1e-4, 5e-5, 6e-5, 1e-5, 2e-5]
     batch_sizes = [16, 8]
-    partitioner_16 = Presharded([3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39, 42, 45, 48, 50, 51]) # provides partitioning strategy. Not necessary, just don't pass it
-                                                                                                                                # and pilot partitioning occurs instead. I already ran a Pilot pass 
-                                                                                                                                # and got these divides.
-
-    partitioner_8  = Presharded([6, 12, 18, 24, 30, 36, 42, 48, 51])
+    partitioner_16 = Presharded([4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 51]) # provides partitioning strategy. Not necessary, just don't pass it
+    partitioner_8  = Presharded([7, 14, 21, 28, 35, 42, 49, 51])
     for idx, lr in enumerate(learning_rates):
         for b_size in batch_sizes:
             print("GENERATING MODEL {}, {}".format(lr, b_size))
@@ -72,7 +69,7 @@ def main(seed):
     
     orchestra = ModelOrchestrator(all_tasks)
     orchestra.verbose = 1
-    orchestra.buffer = 13000
+    orchestra.buffer = 16000
     orchestra.generate()
     time = orchestra.train_models()
 

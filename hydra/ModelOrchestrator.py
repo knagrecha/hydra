@@ -207,7 +207,6 @@ class ModelOrchestrator():
             chosen_shard = chosen_task.get_shard()
             temp_active.append(chosen_device)
             self.idle_tasks.remove(chosen_task)
-            print("Training task {} on {}".format(chosen_task.name, chosen_device))
             self.thread_pool.submit(self.train_shard_on_device, chosen_task, chosen_shard, chosen_device)
         #print(self.active_devices)
         # recalculate cached shards
@@ -237,12 +236,7 @@ class ModelOrchestrator():
         
         # runtime
         start = timer()
-        old_time = 0
         while len(self.tasks) > 0:
-            if (self.verbose == 1 and timer() - old_time > 10):
-                for task in self.tasks:
-                    print(task.name + ": Epoch {}, {} / {} minibatches complete, remaining time (approx.): {:.2f}hrs, last runtime: {:.2f}, last loss: {:.2f} | ".format( task.total_epochs - task.epochs, task.total_length - task.batches_remaining, task.total_length, task.remaining_runtime/3600, task.last_runtime, task.last_loss))
-                old_time = timer()
             try:
                 self.sleep_event.wait()
                 self.sleep_event.clear()
@@ -250,7 +244,6 @@ class ModelOrchestrator():
                     break
                     
                 temp_active = []
-                subt = timer()
                 holder = self.available_devices[:] # avoid iterating over available devices, which is modified inside the loop
                 for chosen_device in holder:
                     chosen_task = self.cached_tasks[chosen_device]
@@ -262,12 +255,19 @@ class ModelOrchestrator():
                         chosen_shard = chosen_task.get_shard()
                         running_tasks[chosen_device] = chosen_task
                         temp_active.append(chosen_device)
-                        print("Training {} on {}".format(chosen_task.name, chosen_device))
+                        self.thread_pool.submit(self.train_shard_on_device, chosen_task, chosen_shard, chosen_device)
+                    else:
+                        task_times = [(i.total_time * i.batches_remaining) + i.total_length * i.total_time * i.epochs for i in self.idle_tasks]
+                        chosen_task = self.idle_tasks[np.argmax(task_times)]
+                        self.lock_device(chosen_device)
+                        chosen_task.setup_timing(chosen_device)
+                        self.active_tasks.append(chosen_task)
+                        running_tasks[chosen_device] = chosen_task
+                        chosen_shard = chosen_task.get_shard()
+                        temp_active.append(chosen_device)
+                        self.idle_tasks.remove(chosen_task)
                         self.thread_pool.submit(self.train_shard_on_device, chosen_task, chosen_shard, chosen_device)
 
-                end = timer()
-                #print("Devices needing a cache {}".format(temp_active))
-                subt = timer()
                 considerables = self.idle_tasks[:]
                 for active_device in temp_active:
                     active_task = running_tasks[active_device]
@@ -289,7 +289,6 @@ class ModelOrchestrator():
                             considerables.remove(cache_task)
                     self.cached_tasks[active_device] = cache_task
 
-                end = timer()
                 #thread_lock.release()
             except KeyboardInterrupt:
                 if thread_lock.locked():
