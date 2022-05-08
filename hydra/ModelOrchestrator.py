@@ -228,7 +228,6 @@ class ModelOrchestrator():
             if cache_task is not None:
                 if (cache_task.queue_len > 1):
                     cache_task.queue[0].model.to("cuda:{0}".format(active_device), non_blocking=True)
-                    print("CACHING {} to {}".format(cache_task.name, active_device))
                     if cache_task != active_task:
                         considerables.remove(cache_task)
                     self.cached_tasks[active_device] = cache_task
@@ -257,20 +256,8 @@ class ModelOrchestrator():
                         temp_active.append(chosen_device)
                         self.cached_tasks[chosen_device] = None
                         self.thread_pool.submit(self.train_shard_on_device, chosen_task, chosen_shard, chosen_device)
-                    else:
-                        task_times = [(i.total_time * i.batches_remaining) + i.total_length * i.total_time * i.epochs for i in self.idle_tasks]
-                        if (len(task_times) > 0):
-                            chosen_task = self.idle_tasks[np.argmax(task_times)]
-                            self.lock_device(chosen_device)
-                            chosen_task.setup_timing(chosen_device)
-                            self.active_tasks.append(chosen_task)
-                            running_tasks[chosen_device] = chosen_task
-                            chosen_shard = chosen_task.get_shard()
-                            temp_active.append(chosen_device)
-                            self.idle_tasks.remove(chosen_task)
-                            self.thread_pool.submit(self.train_shard_on_device, chosen_task, chosen_shard, chosen_device)
 
-                considerables = self.idle_tasks[:]
+                considerables = [x for x in self.idle_tasks if x not in self.cached_tasks]
                 for active_device in temp_active:
                     active_task = running_tasks[active_device]
                     if (len(active_task.queue) > 0):

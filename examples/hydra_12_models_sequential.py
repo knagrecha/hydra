@@ -28,7 +28,7 @@ def run_test(model):
         accum_loss = 0
         for sample, label in valid_loader:
             ctr+=1
-            outputs = new_model(sample)
+            outputs = model(sample)
             my_loss = pretraining_loss(outputs, label)
             accum_loss += my_loss.item()
             if (ctr % 10 == 0):
@@ -49,7 +49,6 @@ def main(seed):
     all_dataloaders = []
     lr_names = ["3e-4", "1e-4", "5e-5", "6e-5", "1e-5", "2e-5"]
     learning_rates = [3e-4, 1e-4, 5e-5, 6e-5, 1e-5, 2e-5]
-    learning_rates=[3e-4, 1e-4, 5e-5]
     batch_sizes = [16, 8]
     partitioner_16 = Presharded([4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 51]) # provides partitioning strategy. Not necessary, just don't pass it
     partitioner_8  = Presharded([7, 14, 21, 28, 35, 42, 49, 51])
@@ -78,17 +77,11 @@ def main(seed):
     best_model = None
     best_idx = -1
     for idx, model in enumerate(all_models):
-        score = run_test(model)
-        if (score < lowest_score):
-            best_model = model
-            lowest_score = score
-            best_idx = idx
-    
-    lr = lr_names[best_idx / 3]
-    b_size = batch_sizes[best_idx % 3 ]
-    print("RANDOM SEED: {} BEST LR: {} BEST B_SIZE: {}".format(seed, lr, b_size))
-    torch.save(best_model, "hydra_best_model_lr_{}_bsize_{}_seed_{}".format(lr, b_size, seed))
-
+        lr = lr_names[int(best_idx / len(batch_sizes))]
+        b_size = batch_sizes[best_idx % len(batch_sizes) ]
+        print("RANDOM SEED: {} LR: {} B_SIZE: {}".format(seed, lr, b_size))
+        torch.save(best_model, "hydra_model_lr_{}_bsize_{}_seed_{}".format(lr, b_size, seed))
+        # eval separately
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int)
