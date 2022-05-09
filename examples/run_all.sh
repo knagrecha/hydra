@@ -1,0 +1,3 @@
+python3 hydra_12_models_sequential.py 0
+python3 hydra_12_models_sequential.py 1
+python3 hydra_12_models_sequential.py 2

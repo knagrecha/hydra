@@ -14,6 +14,7 @@
 from hydra.utilities import delete_batch, move_batch_to_device
 import torch
 
+
 """
     Forward pass at the end of the model. Must accept as input
     model, optimizer, data batch, labels, a criterion, the device,
@@ -27,14 +28,11 @@ class ForwardLoss():
         self.idx = idx
 
     def run(self, model, optimizer, batch_input, labels, criterion, device, scaler=None):
-        
-        old = next(model.parameters()).device
-        model.to(device, non_blocking=True)
 
+       
+        model.to(device, non_blocking=True)
         batch_input = move_batch_to_device(batch_input, device)
-        
-        model.zero_grad()  # zeroes the gradient buffers of all parameters
-        optimizer.zero_grad()  # zero the gradient buffers
+       
         
         labels = move_batch_to_device(labels, device)
         
@@ -42,10 +40,10 @@ class ForwardLoss():
         if self.idx != 0:
             if not isinstance(batch_input, torch.Tensor):
                 for batch in batch_input:
+                    
                     batch.requires_grad_(True)
             else:
                 batch_input.requires_grad_(True)
-
 
         with torch.cuda.amp.autocast():
             ns_labels = model(batch_input)
@@ -73,9 +71,9 @@ class ForwardLoss():
             scaler.update()
         else:
             optimizer.step()
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
 
-        model.zero_grad()
+        model.zero_grad(set_to_none=True)
 
         #shard_model = shard.model.to("cpu", non_blocking=True)
 

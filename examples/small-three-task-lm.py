@@ -19,10 +19,12 @@ from hydra import ModelTask, ModelOrchestrator
 import customLayers as custom
 import copy
 import torch
+import torch.nn as nn
 from torchtext.experimental.datasets import WikiText2
 from torch.utils.data import DataLoader
 from os import path
 from timeit import timeit as timer
+import gc
 
 """
     Preprocessing functions for the dataloaders.
@@ -103,8 +105,119 @@ def get_data_loader_train(b_size):
 
 
 """
-    Main function
+    Model Parallel implementation. The ShardModel type is just a slightly altered implementation of torch.nn.Sequential.
 """
+
+
+class BERTModelTwo(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.seq_1 = hydra.components.partitioner.containers.ShardModel([
+            custom.BertEmbedding(28783, 768, transpose=False),
+
+            # 4 layers
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+
+            # 8 layers
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+
+            # 12 layers
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+
+            # 16 layers
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+
+
+            # 20 layers
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+
+            # 24 layers
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+
+
+            # 28 layers
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+        ]).to("cuda:0")
+    
+
+        self.seq_2 = hydra.components.partitioner.containers.ShardModel([
+
+            # 4 layers
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+
+            # 8 layers
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+
+            # 12 layers
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+
+            # 16 layers
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1), 
+
+            # 20 layers
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+
+            # 24 layers
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+
+            # 28 layers
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+            custom.BertTransformerEncoderLayer(768, 16, 1024, 0.1),
+
+
+
+
+            # Pretraining task
+            torch.nn.Linear(768, 768),
+            torch.nn.GELU(),
+            torch.nn.LayerNorm(768, eps=1e-12),
+            torch.nn.Linear(768, 28783)
+
+        ]).to("cuda:1")
+    def forward(self, x):
+        x = self.seq_1(x)
+        return self.seq_2(x.to("cuda:1"))
 
 
 def get_model():
@@ -148,6 +261,50 @@ def get_model():
         custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
         # 24 - BERT-Large Size (340M params)
         
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 28 - BERT-Large Size (340M params)
+        
+        
+         
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 32
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 36
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 40
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 44
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 48
+        
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        custom.BertTransformerEncoderLayer(1024, 16, 1024, 0.5),
+        # 52 - BERT-Large Size (340M params)
+        
 
         torch.nn.Linear(1024, 1024),
         torch.nn.GELU(),
@@ -158,33 +315,72 @@ def get_model():
     
 
 def main():
+    
+    """
+        Runtime Comparison
+    
+    """
+    
+    
+    """
+    epoch_start = timer()
+    idx = 0
+    dataloader = get_data_loader_train(32)
+    total_len = len(dataloader)
+    model_obj = BERTModelTwo()
+    for batch_idx, (seq_input, vals) in enumerate(dataloader):
+        lm_mask = vals[0]
+        label = vals[1]
+        idx += 1
+        optimizer = torch.optim.SGD(model_obj.parameters(), lr = 0.0001)
+        loss_computer = torch.nn.CrossEntropyLoss()
+        out = model_obj([seq_input.to("cuda:0"), None])
+        out = torch.stack([out[i] for i in range(lm_mask.size(0)) if lm_mask[i]])
+        out = out.view(-1, 28783)
+        label = label.to("cuda:{}".format(1))
+        loss = loss_computer(out, label)
+        loss.backward()
+        optimizer.step()
+        model_obj.zero_grad()
+        del optimizer
+        del loss_computer
+        del seq_input
+        del lm_mask
+        del out
+        del loss
+        del label
+        gc.collect()
+        torch.cuda.empty_cache()
+        print("Minibatch {} of {}".format(idx, total_len))
+    print("EPOCH {} finished at time {}s".format(epoch,timer() - epoch_start)) 
 
+    """
 
     device_count = torch.cuda.device_count()
 
     model_0 = get_model()
-    model_1 = get_model()
-    model_2 = get_model()
+    #model_1 = get_model()
+    #model_2 = get_model()
     
     params = sum(p.numel() for p in model_0.parameters())
     print("Total parameters: {}".format(params))
     
-    dataloader_0 = get_data_loader_train(32) # Generate dataloader
-    dataloader_1 = get_data_loader_train(32)
-    dataloader_2 = get_data_loader_train(32)
+    dataloader_0 = get_data_loader_train(128) # Generate dataloader
+    #dataloader_1 = get_data_loader_train(32)
+    #dataloader_2 = get_data_loader_train(32)
     
     
 
     
-    task_0 = ModelTask("Model 0", model_0, pretraining_loss, dataloader_0, 0.001, 4)
-    task_1 = ModelTask("Model 1", model_1, pretraining_loss, dataloader_1, 0.001, 4)
-    task_2 = ModelTask("Model 2", model_2, pretraining_loss, dataloader_2, 0.001, 4)
+    task_0 = ModelTask("Model 0", model_0, pretraining_loss, dataloader_0, 0.001, 1)
+    #task_1 = ModelTask("Model 1", model_1, pretraining_loss, dataloader_1, 0.001, 4)
+    #task_2 = ModelTask("Model 2", model_2, pretraining_loss, dataloader_2, 0.001, 4)
     
     
 
 
     # create orchestrator
-    orchestra = ModelOrchestrator([task_0, task_1, task_2])
+    orchestra = ModelOrchestrator([task_0])
     orchestra.verbose = 1
 
     """

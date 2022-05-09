@@ -83,7 +83,7 @@ class ModelTask():
         self.anticipated_curr_shard_time = 0
         self.setup_complete = False
         self.total_time = 0
-
+        self.new_total_time = 0
     def clear(self):
         del self._old_data
         del self.dataloader
@@ -119,18 +119,14 @@ class ModelTask():
                                                                         verbose
                                                                         )
         self.verbose = verbose
-        
         self.queue.extend(self.forward_shards)
         self.queue.extend(self.backward_shards)
-        
         start = timer()
         self.dataloader = iter(self._old_data)
         a = next(self.dataloader)
         self.batch_time = timer() - start
         del self.dataloader
         self.dataloader = iter(self._old_data)
-        
-        
         available_gpus = torch.cuda.device_count()
         available_devices = list(range(available_gpus))
         free_spaces = [get_free_space(x) for x in available_devices]
@@ -144,22 +140,14 @@ class ModelTask():
             get_load_time(shard, a, device)
             self.list_of_waste.append(timer() - start)
             shard.model = shard.model.cpu()
-        print(self.list_of_waste)
         
         self.queue_len = len(self.queue)
      
     def setup_timing(self, device):
-        
-        if (next(self.queue[0].model.parameters()).device == torch.device(device)):
-            self.anticipated_curr_shard_time = timer() - self.global_timer + self.queue[0].time_cost
-            self.my_device = device
-        else:
-            self.anticipated_curr_shard_time = timer() - self.global_timer + self.queue[0].time_cost + self.list_of_waste[self.curr_cycle]
-            self.my_device = device
+        self.my_device = device
             
     def get_new_batch(self):
         self.last_runtime = timer()-self.last_mini_time
-        
         try:
             batch_full = next(self.dataloader)
         except StopIteration:
@@ -170,7 +158,13 @@ class ModelTask():
             batch_full = next(self.dataloader)
 
         self.batches_remaining -= 1
-        
+        if (self.new_total_time != 0):
+            self.total_time = self.new_total_time / (self.total_length - self.batches_remaining)
+        if (self.batches_remaining % 10 == 0):
+            print("Model {} | Batches {} / {} | Estimated Remaining Time In Epoch {} | Minibatch Time {}".format(self.name, self.batches_remaining, self.total_length, self.batches_remaining * self.total_time, self.total_time))
+
+
+
         self.saved_inter_output.append(batch_full[0:len(batch_full)-1])
         self.label = batch_full[-1]
         

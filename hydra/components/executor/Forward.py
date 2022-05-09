@@ -13,6 +13,7 @@
 
 from hydra.utilities import delete_batch, move_batch_to_device
 import torch
+
 """
     Generic Forward pass module. Must take as input the model, device, and batch.
     Returns output batch.
@@ -25,8 +26,6 @@ class Forward():
         self.idx = idx
 
     def run(self, model, batch_input, device):
-    
-        old = next(model.parameters()).device
         model.to(device, non_blocking=True)
 
         batch_input = move_batch_to_device(batch_input, device)
