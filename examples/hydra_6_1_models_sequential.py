@@ -48,8 +48,8 @@ def main(seed):
     all_models = []
     all_dataloaders = []
     lr_names = ["3e-4", "1e-4", "5e-5", "6e-5", "1e-5", "2e-5"]
-    learning_rates = [3e-4, 1e-4, 5e-5, 6e-5, 1e-5, 2e-5]
-    batch_sizes = [16, 8]
+    learning_rates = [6e-5, 1e-5, 2e-5]
+    batch_sizes = [8, 16]
     partitioner_16 = Presharded([4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 51]) # provides partitioning strategy. Not necessary, just don't pass it
     partitioner_8  = Presharded([7, 14, 21, 28, 35, 42, 49, 51])
     for idx, lr in enumerate(learning_rates):
@@ -80,7 +80,7 @@ def main(seed):
         lr = lr_names[int(idx / len(batch_sizes))]
         b_size = batch_sizes[idx % len(batch_sizes) ]
         print("RANDOM SEED: {} LR: {} B_SIZE: {}".format(seed, lr, b_size))
-        torch.save(best_model, "hydra_model_lr_{}_bsize_{}_seed_{}".format(lr, b_size, seed))
+        torch.save(model, "hydra_model_lr_{}_bsize_{}_seed_{}".format(lr, b_size, seed))
         # eval separately
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

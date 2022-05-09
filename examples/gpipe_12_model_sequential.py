@@ -46,7 +46,7 @@ def main(seed):
     
     
     learning_rates = [3e-4, 1e-4, 5e-5, 6e-5, 1e-5, 2e-5]
-    batch_sizes = [16, 8]
+    batch_sizes = [8, 16]
     summed_runtimes = 0
     
     for idx, lr in enumerate(learning_rates):

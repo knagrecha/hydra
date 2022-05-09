@@ -167,6 +167,7 @@ class ModelOrchestrator():
             profile_timer_end = timer()
 
             chosen_shard.time_cost = profile_timer_end - profile_timer_start # time for process running, assuming model is on device.
+            chosen_task.new_total_time += chosen_shard.time_cost
             #thread_lock.release()
             self.sleep_event.set()
         except Exception as e:
@@ -262,13 +263,14 @@ class ModelOrchestrator():
                     active_task = running_tasks[active_device]
                     if (len(active_task.queue) > 0):
                         cache_task = active_task
-                        lrt = active_task.total_time * active_task.batches_remaining + active_task.total_length * active_task.total_time * active_task.epochs + active_task.total_length
+                        lrt = active_task.total_time * active_task.batches_remaining + active_task.total_length * active_task.total_time * (active_task.epochs - 1)
                     else:
                         lrt = -1
                         cache_task = None
                     for i in considerables:
                         if (len(i.queue) > 0):
-                            task_time = (i.total_time * i.batches_remaining ) + i.total_length * i.total_time * i.epochs
+                            task_time = (i.total_time * i.batches_remaining ) + i.total_length * i.total_time * (i.epochs - 1)
+
                             if task_time > lrt:
                                 lrt = task_time
                                 cache_task = i

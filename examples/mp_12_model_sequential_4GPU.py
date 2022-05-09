@@ -44,7 +44,7 @@ def main(seed):
     lr_names = ["3e-4", "1e-4", "5e-5"]
     
     learning_rates = [3e-4, 1e-4, 5e-5, 6e-5, 1e-5, 2e-5]
-    batch_sizes = [16, 8]
+    batch_sizes = [8, 16]
     summed_runtimes = 0
     
     for idx, lr in enumerate(learning_rates):
@@ -53,7 +53,7 @@ def main(seed):
             new_model = get_ckpt_model()
             optimizer = torch.optim.SGD(new_model.parameters(), lr = lr)
             modules = []
-            boundaries = [12, 14, 14, 11]
+            boundaries = [13, 13, 13, 12]
             children = list(new_model.children())
             total_ctr = 0
             assert sum(boundaries) == len(children)
@@ -114,7 +114,8 @@ def main(seed):
                 sample_1 = sample_1.to("cuda:2")
                 sample_2 = torch.utils.checkpoint.checkpoint_sequential(modules[2], boundaries[2], sample_1)
                 sample_2 = sample_2.to("cuda:3")
-                loss = pretraining_loss(sample_2, label)
+                sample_3 = torch.utils.checkpoint.checkpoint_sequential(modules[3], boundaries[3], sample_2)
+                loss = pretraining_loss(sample_3, label)
                 loss.backward()
                 optimizer_0.step()
                 optimizer_0.zero_grad()
@@ -139,6 +140,7 @@ def main(seed):
                 del sample_0
                 del sample_1
                 del sample_2
+                del sample_3
                 gc.collect()
                 torch.cuda.empty_cache()
 
