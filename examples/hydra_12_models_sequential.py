@@ -80,7 +80,7 @@ def main(seed):
         lr = lr_names[int(idx / len(batch_sizes))]
         b_size = batch_sizes[idx % len(batch_sizes) ]
         print("RANDOM SEED: {} LR: {} B_SIZE: {}".format(seed, lr, b_size))
-        torch.save(best_model, "hydra_model_lr_{}_bsize_{}_seed_{}".format(lr, b_size, seed))
+        torch.save(model, "hydra_model_lr_{}_bsize_{}_seed_{}".format(lr, b_size, seed))
         # eval separately
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
