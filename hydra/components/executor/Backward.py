@@ -70,7 +70,7 @@ class Backward():
             scaler.update()
         else:
             optimizer.step()
-            optimizer.zero_grad(set_to_none=True)
+            optimizer.zero_grad()
 
 
         if not isinstance(toy_input, torch.Tensor):
@@ -80,7 +80,7 @@ class Backward():
         else:
             del toy_input
 
-        model.zero_grad(set_to_none=True)
+        model.zero_grad()
 
 
         return scaler, pass_back_gradients 
