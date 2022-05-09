@@ -9,10 +9,14 @@ Contact knagrech@ucsd.edu for more info.
 To install Hydra, follow the [Installation Guide](https://github.com/knagrecha/hydra/blob/main/INSTALL.md).
 
 ## (For NeurIPS Reviewers)
-To run the model selection workload use examples/hydra_12_models_sequential.py --seed 0.
+To run the model selection workload use 
+
+PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128 examples/hydra_12_models_sequential.py --seed 0.
 To run the scalability workload use examples/scaling_tests.py.
     
 Please note that running 12-task single node experiments (like the paper) is an expensive operation that demands a great deal of DRAM and continuous, heavy GPU utilization. If you want to run a smaller scale version (6 tasks) just to observe the system, I have also prepared two files which represent the 12 tasks split into two. These are examples/hydra_6_0_models_sequential.py and examples/hydra_6_1_models_sequential.py. Use these if you don't have enough DRAM to run the 12-task experiment (~300GB needed).
+
+The PyTorch CUDA split command is very important. PyTorch isn't optimized for constant swaps, so their caching allocator produces a lot of fragmentation and unnecessary OOMs (e.g. 6 GB reserved, fails to allocate 1GB because no valid block size was found). The split command essentially reduces the cacher's flexibility in this regard.
 
 ## Running
 
