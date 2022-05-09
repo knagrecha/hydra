@@ -71,9 +71,9 @@ class ForwardLoss():
             scaler.update()
         else:
             optimizer.step()
-            optimizer.zero_grad(set_to_none=True)
+            optimizer.zero_grad()
 
-        model.zero_grad(set_to_none=True)
+        model.zero_grad()
 
         #shard_model = shard.model.to("cpu", non_blocking=True)
 
