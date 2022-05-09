@@ -12,7 +12,7 @@ To install Hydra, follow the [Installation Guide](https://github.com/knagrecha/h
 To run the model selection workload use examples/hydra_12_models_sequential.py --seed 0.
 To run the scalability workload use examples/scaling_tests.py.
     
-Please note that running 12-task 8-GPU single node experiments (like the paper) is an expensive operation that demands a great deal of DRAM and continuous, heavy GPU utilization. If you want to run a smaller scale version (2-3 GPUs) just to observe the system, I have also prepared test files with lighter workloads, hydra_3_models_sequential.py and hydra_4_models_sequential.py.
+Please note that running 12-task single node experiments (like the paper) is an expensive operation that demands a great deal of DRAM and continuous, heavy GPU utilization. If you want to run a smaller scale version (6 tasks) just to observe the system, I have also prepared two files which represent the 12 tasks split into two. These are examples/hydra_6_0_models_sequential.py and examples/hydra_6_1_models_sequential.py. Use these if you don't have enough DRAM to run the 12-task experiment (~300GB needed).
 
 ## Running
 
