@@ -17,9 +17,9 @@ If you get block allocation errors (e.g.):
 
 ``Assertion `block.allocated' failed.  at ../aten/src/THC/THCCachingHostAllocator.cpp:158``
 
-Try tuning the 128 parameter up.
+Try tuning the 128 parameter up. 
 
-To run the scalability workload use examples/scaling_tests.py.
+To run the scalability workload use examples/scaling_tests.py. We use a max_split_size_mb of 1024 for the scaling tests.
     
 Please note that running 12-task single node experiments (like the paper) is an expensive operation that demands a great deal of DRAM and continuous, heavy GPU utilization. If you want to run a smaller scale version (6 tasks) just to observe the system, I have also prepared two files which represent the 12 tasks split into two. These are examples/hydra_6_0_models_sequential.py and examples/hydra_6_1_models_sequential.py. Use these if you don't have enough DRAM to run the 12-task experiment (~300GB needed).
 
