@@ -12,8 +12,11 @@ To install Hydra, follow the [Installation Guide](https://github.com/knagrecha/h
 To run the model selection workload use 
 
 ``PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128 examples/hydra_12_models_sequential.py --seed 0.``
+
 If you get block allocation errors (e.g.):
+
 ``Assertion `block.allocated' failed.  at ../aten/src/THC/THCCachingHostAllocator.cpp:158``
+
 Try tuning the 128 parameter up.
 
 To run the scalability workload use examples/scaling_tests.py.
