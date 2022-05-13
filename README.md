@@ -17,7 +17,7 @@ If you get block allocation errors (e.g.):
 
 ``Assertion `block.allocated' failed.  at ../aten/src/THC/THCCachingHostAllocator.cpp:158``
 
-Try tuning the 128 parameter up. Worst case scenario use ``PYTORCH_NO_CUDA_MEMORY_CACHING=1``, though this can hurt performance. We are looking into setting up our own caching allocator that does not rely on PyTorch.
+Try tuning the 128 parameter up.  We are looking into setting up our own caching allocator that does not rely on PyTorch.
 
 To run the scalability workload use examples/scaling_hydra.py. We do not use the split prefix for that command.
     
