@@ -160,8 +160,8 @@ class ModelTask():
         self.batches_remaining -= 1
         if (self.new_total_time != 0):
             self.total_time = self.new_total_time / (self.total_length - self.batches_remaining)
-        if (self.batches_remaining % 10 == 0):
-            print("Model {} | Batches {} / {} | Estimated Remaining Time In Epoch {} | Minibatch Time {}".format(self.name, self.batches_remaining, self.total_length, self.batches_remaining * self.total_time, self.total_time))
+        
+        print("Model {} | Batches {} / {} | Estimated Remaining Time In Epoch {} | Minibatch Time {}".format(self.name, self.batches_remaining, self.total_length, self.batches_remaining * self.total_time, self.total_time))
 
 
 
