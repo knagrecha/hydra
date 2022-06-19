@@ -170,6 +170,7 @@ class ModelOrchestrator():
             chosen_task.new_total_time += chosen_shard.time_cost
             #thread_lock.release()
             self.sleep_event.set()
+
         except Exception as e:
             traceback.print_exc()
             print(e)

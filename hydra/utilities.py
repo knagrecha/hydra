@@ -20,7 +20,7 @@ def get_free_space(idx=0):
     nvmlInit()
     h = nvmlDeviceGetHandleByIndex(idx)
     info = nvmlDeviceGetMemoryInfo(h)
-    return info.free
+    return "{:.2f}GB".format(info.free / (1024 * 1024 * 1024))
 
 def get_used_space(idx=0):
     nvmlInit()
@@ -28,7 +28,7 @@ def get_used_space(idx=0):
     procs = pynvml.nvmlDeviceGetComputeRunningProcesses(h)
     mem = 0
     for p in procs:
-        mem += p.usedGpuMemory / (1024 * 1024)
+        mem += "{.2f}GB".format(p.usedGpuMemory / (1024 * 1024 * 1024))
     return mem
 
 """

@@ -11,7 +11,7 @@
 # limitations under the License.
 # ==============================================================================
 
-from hydra.utilities import delete_batch, move_batch_to_device
+from hydra.utilities import delete_batch, move_batch_to_device, get_free_space
 import torch
 
 
@@ -28,15 +28,10 @@ class ForwardLoss():
         self.idx = idx
 
     def run(self, model, optimizer, batch_input, labels, criterion, device, scaler=None):
-
-       
         model.to(device, non_blocking=True)
         batch_input = move_batch_to_device(batch_input, device)
-       
         
         labels = move_batch_to_device(labels, device)
-        
-
         if self.idx != 0:
             if not isinstance(batch_input, torch.Tensor):
                 for batch in batch_input:
@@ -54,7 +49,6 @@ class ForwardLoss():
 
         loss.backward()
 
-
         pass_back_gradients = []
         
         if self.idx != 0:
@@ -65,7 +59,6 @@ class ForwardLoss():
                 pass_back_gradients.append(batch_input.grad)
         else:
             pass_back_gradients = None
-
         if (scaler is not None):
             scaler.step(optimizer)
             scaler.update()
@@ -80,5 +73,4 @@ class ForwardLoss():
         del labels
 
         delete_batch(batch_input)
-
         return scaler, pass_back_gradients, loss.item()
