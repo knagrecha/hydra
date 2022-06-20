@@ -13,6 +13,7 @@
 
 from hydra.utilities import delete_batch, move_batch_to_device
 import torch
+import torch.nn as nn
 
 """
     Generic Forward pass module. Must take as input the model, device, and batch.
@@ -26,19 +27,19 @@ class Forward():
         self.idx = idx
 
     def run(self, model, batch_input, device):
-        
         # Run in DP mode
         if isinstance(device, list):
-            if (!isinstance(model, nn.DataParallel))
-                net = torch.nn.DataParallel(model, device_ids=device, output_device=torch.device("cpu"))
+            if not (isinstance(model, nn.DataParallel)):
+                net = torch.nn.DataParallel(model, device_ids=device)
             else:
                 net = model
+            net.to(device[0], non_blocking=True)
             output = net(batch_input)
             delete_batch(batch_input)
             del net
             return ns_labels
             
-        model.to(device, non_blocking=True)
+        
         batch_input = move_batch_to_device(batch_input, device)
         with torch.no_grad() and torch.cuda.amp.autocast():
             ns_labels = model(batch_input)

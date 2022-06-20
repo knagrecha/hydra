@@ -40,7 +40,7 @@ class ModelOrchestrator():
         
         #multiprocessing.set_start_method('spawn', force=True)
 
-        available_gpus = min(torch.cuda.device_count(), len(tasks))
+        available_gpus = torch.cuda.device_count()
         
        
         
@@ -90,7 +90,10 @@ class ModelOrchestrator():
     def train_shard_on_device(self, chosen_task, chosen_shard, chosen):
         try:
             profile_timer_start = timer()
-            device = torch.device("cuda:{0}".format(chosen))
+            if isinstance(chosen, list):
+                device = [torch.device("cuda:{0}".format(c)) for c in chosen]
+            else:
+                device = torch.device("cuda:{0}".format(chosen))
             if chosen_shard.idx == 0:
                 if chosen_shard.direction == "f":
                     chosen_task.get_new_batch()
@@ -176,12 +179,20 @@ class ModelOrchestrator():
             print(e)
             
     def lock_device(self, chosen):
-        self.active_devices.append(chosen)
-        self.available_devices.remove(chosen)
+        if isinstance(chosen, list):
+            self.active_devices.extend(chosen)
+            self.available_devices = (set(self.available_devices)-set(chosen))
+        else:
+            self.active_devices.append(chosen)
+            self.available_devices.remove(chosen)
     
     def unlock_device(self, chosen):
-        self.active_devices.remove(chosen)
-        self.available_devices.append(chosen)
+        if isinstance(chosen, list):
+            self.available_devices.extend(chosen)
+            self.active_devices = (set(self.active_devices)-set(chosen))
+        else:
+            self.active_devices.remove(chosen)
+            self.available_devices.append(chosen)
     
    
     def train_models(self):
@@ -198,18 +209,47 @@ class ModelOrchestrator():
         # initial run
 
         temp_active = []
-        for chosen_device in self.all_devices:
-            task_times = [(i.total_time * i.batches_remaining) + i.total_length * i.total_time * i.epochs for i in self.idle_tasks]
-            chosen_task = self.idle_tasks[np.argmax(task_times)]
-
+        
+        
+        # iterate over devices and submit tasks
+        d_index = 0
+        while d_index < len(self.all_devices):
+            
+            task_times = [(i.total_time * i.batches_remaining) + i.total_length * i.total_time * i.epochs for i in self.idle_tasks] 
+            
+            chosen_task = self.idle_tasks[np.argmax(task_times)] # select task with longest remaining time
+            
+            # if you have extra devices free
+            print("LEN SELF IDLE TASKS: {} LEN SELF AVAILABLE DEVICES: {}".format(len(self.idle_tasks), len(self.available_devices)))
+            if len(self.idle_tasks) < len(self.available_devices):
+                extra_devices = len(self.available_devices) - len(self.idle_tasks)
+                chosen_device = []
+                # keep adding devices for 'extra' count (include initial as well)
+                for i in range(extra_devices + 1):
+                    dev = self.all_devices[d_index]
+                    chosen_device.append(dev)
+                    running_tasks[dev] = chosen_task
+                    d_index+=1
+                print("DP Assigned Devices for task {}: {}".format(chosen_task.name, chosen_device))
+                temp_active.extend(chosen_device)
+                
+            else:
+                chosen_device = self.all_devices[d_index]
+                running_tasks[chosen_device] = chosen_task
+                temp_active.append(chosen_device)
+                d_index += 1
+                
             self.lock_device(chosen_device)
-            chosen_task.setup_timing(chosen_device)
-            self.active_tasks.append(chosen_task)
-            running_tasks[chosen_device] = chosen_task
+            chosen_task.setup_timing(chosen_device) # this line may be unnecessary, consider removing
+            self.active_tasks.append(chosen_task)            
             chosen_shard = chosen_task.get_shard()
-            temp_active.append(chosen_device)
+            
             self.idle_tasks.remove(chosen_task)
             self.thread_pool.submit(self.train_shard_on_device, chosen_task, chosen_shard, chosen_device)
+            
+            
+       
+            
         #print(self.active_devices)
         # recalculate cached shards
         considerables = self.idle_tasks[:]

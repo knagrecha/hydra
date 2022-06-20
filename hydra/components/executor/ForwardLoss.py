@@ -13,6 +13,7 @@
 
 from hydra.utilities import delete_batch, move_batch_to_device, get_free_space
 import torch
+import torch.nn as nn
 
 
 """
@@ -31,7 +32,7 @@ class ForwardLoss():
         
         # Run in DP mode
         if isinstance(device, list):
-            if (!isinstance(model, nn.DataParallel)):
+            if not (isinstance(model, nn.DataParallel)):
                 net = torch.nn.DataParallel(model, device_ids=device)
             else:
                 net = model
@@ -43,7 +44,7 @@ class ForwardLoss():
                         batch.requires_grad_(True)
                 else:
                     batch_input.requires_grad_(True)
-                    
+            net.to(device[0], non_blocking=True)
             out = net(batch_input)
             labels = move_batch_to_device(labels, out.device)
             loss = criterion(out, labels)

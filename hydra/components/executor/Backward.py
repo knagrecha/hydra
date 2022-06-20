@@ -13,6 +13,7 @@
 
 from hydra.utilities import delete_batch, move_batch_to_device
 import torch
+import torch.nn as nn
 
 
 """
@@ -30,11 +31,11 @@ class Backward():
         
         # Run in DP mode
         if isinstance(device, list):
-            if (!isinstance(model, nn.DataParallel)):
+            if not (isinstance(model, nn.DataParallel)):
                 net = torch.nn.DataParallel(model, device_ids=device)
             else:
                 net = model
-            
+            net.to(device[0], non_blocking=True)
             if self.idx != 0:
                 if not isinstance(batch_input, torch.Tensor):
                     for batch in back_input:
@@ -50,13 +51,13 @@ class Backward():
             pass_back_gradients = None
 
             if self.idx != 0: # the first backwards pass need not compute back pass gradients.
-            if (not isinstance(toy_input, torch.Tensor)):
-                pass_back_gradients = [i.grad for i in toy_input]
-                for m_input in toy_input:
-                    m_input.requires_grad_(False)
-            else:
-                pass_back_gradients = toy_input.grad
-                back_input.requires_grad_(False)
+                if (not isinstance(toy_input, torch.Tensor)):
+                    pass_back_gradients = [i.grad for i in toy_input]
+                    for m_input in toy_input:
+                        m_input.requires_grad_(False)
+                else:
+                    pass_back_gradients = toy_input.grad
+                    back_input.requires_grad_(False)
                 
             # the user will pass in what WAS the input for this stage!
             if (scaler is not None):
