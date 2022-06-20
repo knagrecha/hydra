@@ -28,6 +28,52 @@ class Backward():
 
     def run(self, model, optimizer, batch_input, device, back_input, scaler=None):
         
+        # Run in DP mode
+        if isinstance(device, list):
+            if (!isinstance(model, nn.DataParallel)):
+                net = torch.nn.DataParallel(model, device_ids=device)
+            else:
+                net = model
+            
+            if self.idx != 0:
+                if not isinstance(batch_input, torch.Tensor):
+                    for batch in back_input:
+                        batch.requires_grad_(True)
+                else:
+                    back_input.requires_grad_(True)
+                    
+            out = net(back_input)
+            torch.autograd.backward(back_input, batch_input)
+            del out
+            del batch_input
+            
+            pass_back_gradients = None
+
+            if self.idx != 0: # the first backwards pass need not compute back pass gradients.
+            if (not isinstance(toy_input, torch.Tensor)):
+                pass_back_gradients = [i.grad for i in toy_input]
+                for m_input in toy_input:
+                    m_input.requires_grad_(False)
+            else:
+                pass_back_gradients = toy_input.grad
+                back_input.requires_grad_(False)
+                
+            # the user will pass in what WAS the input for this stage!
+            if (scaler is not None):
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                optimizer.step()
+                optimizer.zero_grad(set_to_none=True)
+
+            model.zero_grad(set_to_none=True)
+            del labels
+
+            delete_batch(batch_input)
+            del net
+            return scaler, pass_back_gradients, loss.item()
+        
+        
         model.to(device, non_blocking=True)
         if not isinstance(back_input, torch.Tensor):
             toy_input = [x.to(device, non_blocking=True) for x in back_input]

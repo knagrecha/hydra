@@ -28,6 +28,52 @@ class ForwardLoss():
         self.idx = idx
 
     def run(self, model, optimizer, batch_input, labels, criterion, device, scaler=None):
+        
+        # Run in DP mode
+        if isinstance(device, list):
+            if (!isinstance(model, nn.DataParallel)):
+                net = torch.nn.DataParallel(model, device_ids=device)
+            else:
+                net = model
+            
+            if self.idx != 0:
+                if not isinstance(batch_input, torch.Tensor):
+                    for batch in batch_input:
+
+                        batch.requires_grad_(True)
+                else:
+                    batch_input.requires_grad_(True)
+                    
+            out = net(batch_input)
+            labels = move_batch_to_device(labels, out.device)
+            loss = criterion(out, labels)
+            loss.backward()
+            
+            pass_back_gradients = []
+
+            if self.idx != 0:
+                # pass_back_gradients are on device
+                if not isinstance(batch_input, torch.Tensor):
+                    pass_back_gradients = [ batch.grad for batch in batch_input ]
+                else:
+                    pass_back_gradients.append(batch_input.grad)
+            else:
+                pass_back_gradients = None
+            if (scaler is not None):
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                optimizer.step()
+                optimizer.zero_grad(set_to_none=True)
+
+            model.zero_grad(set_to_none=True)
+            del labels
+
+            delete_batch(batch_input)
+            del net
+            return scaler, pass_back_gradients, loss.item()
+       
+    
         model.to(device, non_blocking=True)
         batch_input = move_batch_to_device(batch_input, device)
         
@@ -67,9 +113,6 @@ class ForwardLoss():
             optimizer.zero_grad(set_to_none=True)
 
         model.zero_grad(set_to_none=True)
-
-        #shard_model = shard.model.to("cpu", non_blocking=True)
-
         del labels
 
         delete_batch(batch_input)

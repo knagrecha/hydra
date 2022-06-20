@@ -26,13 +26,22 @@ class Forward():
         self.idx = idx
 
     def run(self, model, batch_input, device):
-        model.to(device, non_blocking=True)
-
-        batch_input = move_batch_to_device(batch_input, device)
         
+        # Run in DP mode
+        if isinstance(device, list):
+            if (!isinstance(model, nn.DataParallel))
+                net = torch.nn.DataParallel(model, device_ids=device, output_device=torch.device("cpu"))
+            else:
+                net = model
+            output = net(batch_input)
+            delete_batch(batch_input)
+            del net
+            return ns_labels
+            
+        model.to(device, non_blocking=True)
+        batch_input = move_batch_to_device(batch_input, device)
         with torch.no_grad() and torch.cuda.amp.autocast():
             ns_labels = model(batch_input)
-
         delete_batch(batch_input)
-            
+           
         return ns_labels
