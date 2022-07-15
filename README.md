@@ -8,7 +8,7 @@ Contact knagrech@ucsd.edu for more info.
 
 To install Hydra, follow the [Installation Guide](https://github.com/knagrecha/hydra/blob/main/INSTALL.md).
 
-## (For NeurIPS Reviewers)
+## Important
 To run the model selection workload go to the examples folder and run  
 
 ``PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128 hydra_12_models_sequential.py --seed 0.``
