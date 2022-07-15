@@ -90,7 +90,27 @@ that create OOM's when combined with the pre-loaded parameters from double-buffe
 We are attempting to create a more exact partitioning algorithm to address this issue fully. In the meantime, use the quick fixes.
 
 ## Publications
-<Temporarily Removed for Double-Blind Review>
+@misc{nagrecha2021hydra,
+      title={Hydra: A System for Large Multi-Model Deep Learning}, 
+      author={Kabir Nagrecha and Arun Kumar},
+      year={2021},
+      eprint={2110.08633},
+      archivePrefix={arXiv},
+      primaryClass={cs.DC}
+}
+
+@inproceedings{hydravision,
+author = {Nagrecha, Kabir},
+title = {Model-Parallel Model Selection for Deep Learning Systems},
+year = {2021},
+publisher = {Association for Computing Machinery},
+url = {https://doi.org/10.1145/3448016.3450571},
+doi = {10.1145/3448016.3450571},
+journal = {Proceedings of the 2021 International Conference on Management of Data},
+pages = {2929–2931},
+}
+
+
 
 ```
 
