@@ -22,9 +22,9 @@ from hydra.components.partitioner import Pilot
 
 
 def get_load_time(shard, a, device):
-    b = a[:-1]
+    b = a[:-1] # label
     b = [d.to(device) for d in b]
-    shard.model.to(device)
+    shard.model.to(device) # model
     for idx, i in enumerate(b):
         b[idx] = i.cpu()
     for idx, i in enumerate(b):
@@ -42,13 +42,11 @@ class ModelTask():
         self.global_timer = global_timer
         self.name = name
         self.model = model
-        self.forward_shards = []
-        self.backward_shards = []
+        self.forward_shards, self.backward_shards = [], []
+        
         self.remaining_runtime = 0
-        
         self.partitioner = partitioner
-        
-        
+       
         self.lr = lr
         self.total_epochs = epochs
         self.epochs = epochs
@@ -58,6 +56,7 @@ class ModelTask():
         self._old_data = dataloader
         self.dataloader = iter(dataloader)
         self.total_length = len(self._old_data)
+        
         self.queue = []
         self.batches_remaining = len(dataloader)
         self.saved_inter_output = []
@@ -84,6 +83,7 @@ class ModelTask():
         self.setup_complete = False
         self.total_time = 0
         self.new_total_time = 0
+        
     def clear(self):
         del self._old_data
         del self.dataloader
@@ -108,7 +108,6 @@ class ModelTask():
         self.anticipated_curr_shard_time = 0
         
    
-        
     def setup(self, verbose, buffer):
         
         self.forward_shards, self.backward_shards, self.total_time = self.partitioner.shard(
