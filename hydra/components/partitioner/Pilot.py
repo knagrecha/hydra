@@ -98,22 +98,18 @@ class Pilot():
             
         while partitioning_index < (len(all_layers)):
             
-            batch_input = move_batch_to_device(batch_input, self.selected_device)  
-           
-            print("FREE MEMORY AFTER BATCH TRANSFER: {}".format(get_free_space(self.selected_device_index)))
+            batch_input = move_batch_to_device(batch_input, self.selected_device) 
             oom = False
           
             try:
                 
                 all_layers[partitioning_index] = all_layers[partitioning_index].to(self.selected_device)
-                print("FREE MEMORY AFTER LAYER ADD ON: {}".format(get_free_space(self.selected_device_index)))
                 partitioned_layers.append(all_layers[partitioning_index])
 
                 if (isinstance(batch_input, tuple) or isinstance(batch_input, list)):
                     out = partitioned_layers[-1](*batch_input)
                 else:
                     out = partitioned_layers[-1](batch_input)
-                print("FREE MEMORY AFTER FORWARD: {}".format(get_free_space(self.selected_device_index)))
                 grads = []
                 new_out = []
                 
@@ -130,14 +126,12 @@ class Pilot():
                     if (out.requires_grad):
                         new_out.append(out)
                         grads.append(torch.ones_like(out).to(self.selected_device))
-
-                print("FREE MEMORY AFTER BUILDING GRADIENTS: {}".format(get_free_space(self.selected_device_index)))
                 # Run a backward pass, do not discard memory - future partitioning passes will run through the 
                 # same tree.
                 if (len(new_out)!= 0):
                     torch.autograd.backward(new_out, grads, retain_graph = True)
                     partitioned_layers[-1].zero_grad()
-                print("FREE MEMORY AFTER BACKPROP: {}".format(get_free_space(self.selected_device_index)))
+                    
                 del new_out
                 del grads # Gradients are discarded immediately after use
                 intermediate_activations.append(out) # Add the output of this layer as an intermediate activation
@@ -175,38 +169,33 @@ class Pilot():
                     try:
                         roll_back_count += 1
                         successful_run = True
-                        batch_input = None
-                        gradients = None
-                        model = None
-                        out = None
-                        pioneer_layer = partitioned_layers.pop() # Remove the last added layer
-                        pioneer_layer = pioneer_layer.cpu() # Move it back to CPU memory
-                        print(next(all_layers[partitioning_index].parameters()).device)
+                        batch_input, gradients, model, out = None, None, None, None
+                        pioneer_layer = partitioned_layers.pop().cpu() # Remove the last added layer and move it to CP
+                        
                         if (len(partitioned_layers) == 0):
                             raise RuntimeError("Error: shard size is 0")
 
                         # We do an end-to-end test on the shard. Discard false intermediate activations.
-                        del intermediate_activations
                         intermediate_activations = []
-                        
                         
                         oom = False
 
                         shard_batch_input = move_batch_to_device(shard_batch_input, self.selected_device)
                         
-                        start_f = timer() # used for scheduler
+                        # record forward pass time
+                        start_f = timer() 
                         model = ShardModel(nn.ModuleList(partitioned_layers)) # Create a shard-model
                         model.to(self.selected_device)
-                        torch.cuda.empty_cache() # Consider deleting?
                         out = model(shard_batch_input)
                         end_f = timer()
-                        start_b = timer() # used for scheduler
+                        
+                        # record backward pass time
+                        start_b = timer()
                         gradients = out.detach().clone()
                         torch.autograd.backward(out, gradients)
-                        model.zero_grad()
                         
+                        model.zero_grad()
                         del gradients
-
                         for p in model.parameters():
                             if p.grad is not None:
                                 del p.grad  # free some memory
@@ -214,7 +203,7 @@ class Pilot():
 
                         end_b = timer()
                         
-                        
+                        # offload outputs to CPU
                         if not (isinstance(out, torch.Tensor)):
                             shard_batch_input = [x.cpu().detach().clone() for x in out]
                         else:
@@ -236,15 +225,18 @@ class Pilot():
                 
                 params = sum(p.numel() for p in model.parameters())
                 print("NEW SHARD - {} PARAMETERS".format(params))
+                
                 forward_shards.append(ShardedTask(model, Forward(shard_count), "f", end_f-start_f, shard_count, lr))
                 backward_shards.append(ShardedTask(model, Backward(shard_count), "b", end_b-start_b, shard_count, lr))
+                
                 shard_count+=1
 
-                total_time = total_time + (end_f - start_f) + (end_b - start_b)
-                partitioned_layers = []
+                total_time = total_time + (end_f - start_f) + (end_b - start_b) # update model training time
                 
+                partitioned_layers = []
                 partitioning_index -= roll_back_count # Return to partitioning from the appropriate location
                 partition_indices.append(partitioning_index) # Record partition location
+                
                 torch.cuda.empty_cache() # not necessary, just makes memory debugging easier to view
                 if verbose == 1:
                     print("Free Memory: {}".format(get_free_space(self.selected_device_index)))
@@ -253,42 +245,36 @@ class Pilot():
         # While loop has terminated, but we have not sharded the last set of layers yet
         if (len(partitioned_layers) != 0):
             
-            del intermediate_activations # Consider deleting
             intermediate_activation = []
-            
-            torch.cuda.empty_cache()
             if verbose == 1:
                 print("Free Memory: {}".format(get_free_space(self.selected_device_index)))
             
             shard_batch_input = move_batch_to_device(shard_batch_input, self.selected_device)
-            start_f = timer() # used for scheduler
-
+            
+            # record forward pass time
+            start_f = timer()
             model = ShardModel(nn.ModuleList(partitioned_layers)) # Create shard model
             model.to(self.selected_device)
-
             out = model(shard_batch_input) # Run a forward pass
             end_f = timer()
 
-            start_b = timer() # used for scheduler
-            
-            true_labels = torch.ones_like(out)
-            torch.autograd.backward(out, true_labels)
+            # record backward pass time
+            start_b = timer()
+            labels = torch.ones_like(out)
+            loss = criterion(out, labels)
+            loss.backward()
             model.zero_grad()
             
-            #del loss
-            del true_labels
-            del out
-            
-
-            del batch_input
-
+            del loss, labels, out, batch_input
             model.cpu()  # this is an inplace operation
+
             end_b = timer()
+            
 
             forward_shards.append(ShardedTask(model, ForwardLoss(shard_count), "f", end_f - start_f, shard_count, lr) )
             backward_shards.append(ShardedTask(model, Backward(shard_count), "b", end_b - start_b, shard_count, lr ))
 
-            total_time = total_time + (end_f - start_f) + (end_b - start_b)
+            total_time = total_time + (end_f - start_f) + (end_b - start_b) # update model runtimes
 
             
         if verbose == 1:
@@ -301,9 +287,8 @@ class Pilot():
         if (double_buffer != 0):
             del buffer_space
             torch.cuda.empty_cache()
+            
         if (forward_shards[-1].executor.type != "Forward Loss"):
             forward_shards[-1].executor = ForwardLoss(shard_count)
             
         return forward_shards, backward_shards, total_time
-
-                #print([get_free_space(x) for x in available_devices])
