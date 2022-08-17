@@ -72,8 +72,12 @@ def track_gradients(batch):
 """
 
 def untrack_gradients(batch):
-    if not (isinstance(batch, torch.Tensor)):
-        for x in batch:
-            track_gradients(x)
+    if (not isinstance(batch, torch.Tensor)):
+        gradients = [i.grad for i in batch]
+        for m_input in batch:
+            m_input.requires_grad_(False)
     else:
-        batch.requires_grad_(True)
+        gradients = batch.grad
+        toy_input.requires_grad_(False)
+
+    return gradients
