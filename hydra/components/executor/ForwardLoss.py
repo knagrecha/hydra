@@ -32,15 +32,12 @@ class ForwardLoss():
        
         model.to(device, non_blocking=True)
         batch_input = move_batch_to_device(batch_input, device)
-       
-        
         labels = move_batch_to_device(labels, device)
         
 
         if self.idx != 0:
             if not isinstance(batch_input, torch.Tensor):
                 for batch in batch_input:
-                    
                     batch.requires_grad_(True)
             else:
                 batch_input.requires_grad_(True)
@@ -53,16 +50,13 @@ class ForwardLoss():
             loss = scaler.scale(loss)
 
         loss.backward()
-
-
-        pass_back_gradients = []
         
         if self.idx != 0:
             # pass_back_gradients are on device
             if not isinstance(batch_input, torch.Tensor):
                 pass_back_gradients = [ batch.grad for batch in batch_input ]
             else:
-                pass_back_gradients.append(batch_input.grad)
+                pass_back_gradients = [batch_input.grad]
         else:
             pass_back_gradients = None
 
@@ -74,9 +68,6 @@ class ForwardLoss():
             optimizer.zero_grad(set_to_none=True)
 
         model.zero_grad(set_to_none=True)
-
-        #shard_model = shard.model.to("cpu", non_blocking=True)
-
         del labels
 
         delete_batch(batch_input)
