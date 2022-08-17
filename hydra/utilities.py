@@ -65,3 +65,15 @@ def track_gradients(batch):
             track_gradients(x)
     else:
         batch.requires_grad_(True)
+        
+"""
+    Remove gradient tracking with awareness of data type.
+
+"""
+
+def untrack_gradients(batch):
+    if not (isinstance(batch, torch.Tensor)):
+        for x in batch:
+            track_gradients(x)
+    else:
+        batch.requires_grad_(True)
