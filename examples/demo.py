@@ -37,10 +37,6 @@ def run_test(model):
     print("TEST LOSS: {}".format(math.exp(accum_loss/ctr)))
     return math.exp(accum_loss/ctr)
 
-def report_flops(model, sample):
-    macs, params = get_model_profile(model=model, input_res=sample.shape)
-    print("PARAMETERS: {}".format(params))
-    return 2 * macs / (1000 ** 3)
             
 def main(seed):
     set_random_seed(seed)
