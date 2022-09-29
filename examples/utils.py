@@ -225,41 +225,6 @@ def pretraining_loss(lm_logits, labels):
     return loss
 
 
-def get_base_model():
-    configuration = GPT2Config.from_pretrained('gpt2-xl', output_hidden_states=False)
-    configuration.n_ctx = 512
-    configuration.gradient_checkpointing = True
-    configuration.use_cache = False
-    model = GPT2LMHeadModel.from_pretrained("gpt2-xl", config=configuration)
-    params = sum(p.numel() for p in model.parameters())
-    model.resize_token_embeddings(len(tokenizer))
-    return model
-
-class ModuleWrapperIgnores2ndArg(nn.Module):
-    def __init__(self, module):
-        super().__init__()
-        self.module = module
-
-    def forward(self,x):
-        x = x.long()
-        x = self.module(x)
-        return x
-
-
-def get_ckpt_model():
-    configuration = GPT2Config.from_pretrained('gpt2-xl', output_hidden_states=False)
-    configuration.n_ctx = 512
-    model = DebuggerGPT2LMHeadModel.from_pretrained("gpt2-xl", config=configuration)
-    modules = [ModuleWrapperIgnores2ndArg(GPT2EmbeddingLayer(model.transformer.wte, model.transformer.wpe, model.transformer.drop))]
-    for mod in model.transformer.h:
-        modules.append(mod)
-    modules.append(GPT2OutputLayer(model.transformer.ln_f))
-    modules.append(model.lm_head)
-    params = sum(p.numel() for p in model.parameters())
-    model.resize_token_embeddings(len(tokenizer))
-    return nn.Sequential(*modules)
-
-
 def get_sequential_model():
     configuration = GPT2Config.from_pretrained('gpt2-xl', output_hidden_states=False)
     configuration.n_ctx = 512
