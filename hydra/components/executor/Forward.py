@@ -29,6 +29,7 @@ class Forward():
         model.to(device, non_blocking=True)
 
         batch_input = move_batch_to_device(batch_input, device)
+        print(batch_input.shape)
         
         with torch.no_grad() and torch.cuda.amp.autocast():
             ns_labels = model(batch_input)
