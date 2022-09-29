@@ -23,7 +23,7 @@ import math
 #import curses
 import numpy as np
 from .ModelTask import ModelTask
-from hydra.logger import Logger
+from hydra.components.logger import Logger
 
 from datetime import datetime
 import concurrent.futures
