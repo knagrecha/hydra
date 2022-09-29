@@ -35,8 +35,8 @@ class Backward():
             
         batch_input = move_batch_to_device(batch_input, device)
 
-
-        toy_output = model(toy_input)
+        with torch.cpu.amp.autocast():
+            toy_output = model(toy_input)
         
         if scaler is not None:
             toy_output = scaler.scale(toy_output)
