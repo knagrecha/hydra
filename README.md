@@ -110,10 +110,5 @@ doi = {10.1145/3448016.3450571},
 journal = {Proceedings of the 2021 International Conference on Management of Data},
 pages = {2929–2931},
 }
-
-
-
-
-
 ```
 
