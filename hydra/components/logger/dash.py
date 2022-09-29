@@ -38,4 +38,4 @@ class Logger():
             losses.append(t.last_loss)
             
 
-    report_progress(names, epoch_counts, minibatches, minibatch_counts, m_times, t_times, losses)
+        report_progress(names, epoch_counts, minibatches, minibatch_counts, m_times, t_times, losses)
