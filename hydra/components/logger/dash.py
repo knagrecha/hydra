@@ -14,7 +14,7 @@ def report_progress(task_names, epoch_counts, minibatches, minibatch_counts, m_t
 
     for task_idx, task in enumerate(task_names):
         task_progress(task, epoch_counts[task_idx], minibatches[task_idx], minibatch_counts[task_idx], 
-                                                      m_times[task_idx], t_times[task_idx], losses[task_idx] 0 + 5 * task_idx, 0)
+                                                      m_times[task_idx], t_times[task_idx], losses[task_idx], 0 + 5 * task_idx, 0)
 
     
     
