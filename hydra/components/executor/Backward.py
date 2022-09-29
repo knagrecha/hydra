@@ -29,7 +29,7 @@ class Backward():
     def run(self, model, optimizer, batch_input, device, back_input, scaler=None):
         model.to(device, non_blocking=True)
         toy_input = move_batch_to_device(back_input, device)
-        
+        print(toy_input.shape)
         if self.idx != 0:
             track_gradients(toy_input)
             
