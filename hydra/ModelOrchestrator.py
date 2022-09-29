@@ -230,7 +230,8 @@ class ModelOrchestrator():
             try:
                 self.sleep_event.wait()
                 self.sleep_event.clear()
-                self.logger.refresh()
+                if self.verbose == 1:
+                    self.logger.refresh()
                 if (len(self.tasks) == 0):
                     break
                     
@@ -288,6 +289,8 @@ class ModelOrchestrator():
                 if thread_lock.locked():
                     thread_lock.release()
                 print ("Caught KeyboardInterrupt, terminating workers")
+                if self.verbose == 1:
+                    self.logger.cleanup()
                 end = timer()
                 print()
                 print()
@@ -296,5 +299,7 @@ class ModelOrchestrator():
                 
         end = timer()
         print("TOTAL TIME TAKEN: {}".format(end - start))
+        if self.verbose == 1:
+            self.logger.cleanup()
         return (end-start)
         
