@@ -69,7 +69,7 @@ class ModelOrchestrator():
     def generate(self):
         self.setup_all_models()
         if self.verbose == 1:
-            self.logger = Logger(tasks)
+            self.logger = Logger(self.tasks)
 
     """
         Setups the parameters for the train_shard function
