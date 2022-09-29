@@ -78,6 +78,6 @@ def untrack_gradients(batch):
             m_input.requires_grad_(False)
     else:
         gradients = batch.grad
-        toy_input.requires_grad_(False)
+        batch.requires_grad_(False)
 
     return gradients
