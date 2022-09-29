@@ -2,17 +2,19 @@ import curses
 import time
 
 
-
-
-    
-    
-
 class Logger():
     def __init__(self, tasks):
         self.tasks = tasks
         self.stdscr = curses.initscr()
         curses.noecho()
         curses.cbreak()
+        
+        
+    def cleanup(self):
+        curses.nocbreak()
+        self.stdscr.keypad(0)
+        curses.echo()
+        curses.endwin()
         
     def task_progress(self, name, epoch_count, minibatch, minibatch_count, m_time, t_time, loss, y, x):
         progress = int(minibatch / minibatch_count)
@@ -21,6 +23,8 @@ class Logger():
         self.stdscr.addstr(y+2, x, "Minibatch Time: {:.2f}s | Remaining Time in Epoch: {:.2f}s".format(m_time, t_time))
         self.stdscr.addstr(y+3, x, "Last Loss: {}".format(loss))
         self.stdscr.refresh()
+    
+
 
     def report_progress(self, task_names, epoch_counts, minibatches, minibatch_counts, m_times, t_times, losses):
         for task_idx, task in enumerate(task_names):
@@ -40,3 +44,5 @@ class Logger():
             
 
         self.report_progress(names, epoch_counts, minibatches, minibatch_counts, m_times, t_times, losses)
+        
+    
