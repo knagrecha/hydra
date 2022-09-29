@@ -31,6 +31,7 @@ class Backward():
         toy_input = move_batch_to_device(back_input, device)
         print(toy_input.shape)
         if self.idx != 0:
+            print("IDx 0")
             track_gradients(toy_input)
             
         batch_input = move_batch_to_device(batch_input, device)
