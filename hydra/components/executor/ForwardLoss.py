@@ -32,6 +32,7 @@ class ForwardLoss():
        
         model.to(device, non_blocking=True)
         batch_input = move_batch_to_device(batch_input, device)
+        print("FL: {}".format(batch_input.shape))
         labels = move_batch_to_device(labels, device)
         
 
