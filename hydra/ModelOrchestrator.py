@@ -130,7 +130,7 @@ class ModelOrchestrator():
 
             # if forward, prep it for next pass.
             else:
-                chosen_task.saved_inter_output.append(my_batch)
+                chosen_task.saved_inter_output.append(new_batch)
 
             if len(chosen_task.queue) == 0: # if the model queue wasn't refreshed, it implies the model has finished training.
                 self.tasks.remove(chosen_task)
