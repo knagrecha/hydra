@@ -33,7 +33,7 @@ class Backward():
         if self.idx != 0:
             track_gradients(toy_input)
             
-        batch_input = move_batch_to_device(batch_input)
+        batch_input = move_batch_to_device(batch_input, device)
 
         with torch.cuda.amp.autocast():
             toy_output = model(toy_input)
