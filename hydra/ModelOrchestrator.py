@@ -68,13 +68,8 @@ class ModelOrchestrator():
         
     def generate(self):
         self.setup_all_models()
-        self.logger = Logger(tasks)
-
-    def log(self, message):
         if self.verbose == 1:
-            screen_lock.acquire()
-            print(message)
-            screen_lock.release()
+            self.logger = Logger(tasks)
 
     """
         Setups the parameters for the train_shard function
