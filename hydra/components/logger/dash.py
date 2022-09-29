@@ -26,12 +26,14 @@ class Logger():
         curses.cbreak()
   
     def refresh(self):
-        names, epochs, epoch_counts, minibatches, minibatch_counts, m_times, t_times = [], [], [], [], [], [], []
-        for t in tasks:
+        names, epoch_counts, minibatches, minibatch_counts, m_times, t_times = [], [], [], [], [], []
+        for t in self.tasks:
             names.append(t.name)
-            epochs.append(t.epochs)
+            epoch_counts.append(t.epochs)
             minibatches.append(t.total_length - t.batches_remaining)
             minibatch_counts.append(t.total_length)
             m_times.append(t.total_time)
             t_times.append(t.total_time * t.batches_remaining)
             
+
+    report_progress(names, epoch_counts, minibatches, minibatch_counts, m_times, t_times)
