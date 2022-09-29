@@ -41,7 +41,7 @@ class ModelOrchestrator():
     def __init__(self, tasks, verbose=0, buffer=None):
         available_gpus = min(torch.cuda.device_count(), len(tasks))
         
-        self.logger = Logger(tasks)
+        
         self.all_devices, self.available_devices = list(range(available_gpus)), list(range(available_gpus))
         
         self.active_devices = []
@@ -65,8 +65,10 @@ class ModelOrchestrator():
             task.setup(self.verbose, self.buffer)
         end = timer()
         
+        
     def generate(self):
         self.setup_all_models()
+        self.logger = Logger(tasks)
 
     def log(self, message):
         if self.verbose == 1:
