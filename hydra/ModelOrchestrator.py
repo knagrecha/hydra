@@ -93,6 +93,7 @@ class ModelOrchestrator():
                 # FORWARD + LOSS (last shard)
                 if chosen_shard.idx == len(chosen_task.forward_shards)- 1:
                     arg_list = [batch, chosen_task.label, chosen_task.criterion, device, chosen_task.scaler]
+                    chosen_task.saved_inter_output.pop()
                     chosen_task.scaler, new_batch, chosen_task.last_loss = chosen_shard.run(arg_list)
                     
                 # REGULAR FORWARD
