@@ -2,3 +2,4 @@ pynvml
 GPUtil
 numpy
 einops
+torch==1.8.1
