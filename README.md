@@ -6,6 +6,10 @@ Contact knagrech@ucsd.edu for more info.
 
 Note: I am also building [Saturn](https://github.com/knagrecha/saturn), another tool for multi-large-model training. If you're interested in Hydra, you might like to checkout Saturn!
 
+## Docs
+
+You can find the docs on our [site](https://hydra-dl.readthedocs.io/en/latest/).
+
 ## Install
 
 To install Hydra, follow the [Installation Guide](https://github.com/knagrecha/hydra/blob/main/INSTALL.md).
