@@ -4,6 +4,8 @@ Hydra is a large-model execution engine optimized for multi-task execution. It e
 
 Contact knagrech@ucsd.edu for more info.
 
+Note: I am also building [Saturn](https://github.com/knagrecha/saturn), another tool for multi-large-model training. If you're interested in Hydra, you might like to checkout Saturn!
+
 ## Install
 
 To install Hydra, follow the [Installation Guide](https://github.com/knagrecha/hydra/blob/main/INSTALL.md).

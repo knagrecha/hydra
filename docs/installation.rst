@@ -1,5 +1,5 @@
 ******************
-Installing Saturn
+Installing Hydra
 ******************
 
 .. mdinclude:: ../INSTALL.md
