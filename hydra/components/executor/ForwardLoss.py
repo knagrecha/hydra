@@ -29,15 +29,10 @@ class ForwardLoss():
         self.idx = idx
 
     def run(self, model, optimizer, batch_input, labels, criterion, device, scaler=None):
-        
-        old = next(model.parameters()).device
-        model.to(device, non_blocking=True)
 
+       
+        model.to(device, non_blocking=True)
         batch_input = move_batch_to_device(batch_input, device)
-        
-        model.zero_grad()  # zeroes the gradient buffers of all parameters
-        optimizer.zero_grad()  # zero the gradient buffers
-        
         labels = move_batch_to_device(labels, device)
         
 
@@ -48,7 +43,6 @@ class ForwardLoss():
             else:
                 batch_input.requires_grad_(True)
 
-
         with torch.cuda.amp.autocast():
             ns_labels = model(batch_input)
             loss = criterion(ns_labels, labels)
@@ -57,16 +51,13 @@ class ForwardLoss():
             loss = scaler.scale(loss)
 
         loss.backward()
-
-
-        pass_back_gradients = []
         
         if self.idx != 0:
             # pass_back_gradients are on device
             if not isinstance(batch_input, torch.Tensor):
                 pass_back_gradients = [ batch.grad for batch in batch_input ]
             else:
-                pass_back_gradients.append(batch_input.grad)
+                pass_back_gradients = [batch_input.grad]
         else:
             pass_back_gradients = None
 
@@ -75,12 +66,9 @@ class ForwardLoss():
             scaler.update()
         else:
             optimizer.step()
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
 
-        model.zero_grad()
-
-        #shard_model = shard.model.to("cpu", non_blocking=True)
-
+        model.zero_grad(set_to_none=True)
         del labels
 
         delete_batch(batch_input)

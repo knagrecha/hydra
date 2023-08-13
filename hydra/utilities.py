@@ -53,3 +53,31 @@ def move_batch_to_device(batch, device):
         return [x.to(device, non_blocking=True) for x in batch]
     else:
         return batch.to(device, non_blocking=True)
+    
+"""
+    Add gradient tracking with awareness of data type.
+
+"""
+
+def track_gradients(batch):
+    if not (isinstance(batch, torch.Tensor)):
+        for x in batch:
+            track_gradients(x)
+    else:
+        batch.requires_grad_(True)
+        
+"""
+    Remove gradient tracking with awareness of data type.
+
+"""
+
+def untrack_gradients(batch):
+    if (not isinstance(batch, torch.Tensor)):
+        gradients = [i.grad for i in batch]
+        for m_input in batch:
+            m_input.requires_grad_(False)
+    else:
+        gradients = batch.grad
+        batch.requires_grad_(False)
+
+    return gradients

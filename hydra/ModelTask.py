@@ -27,7 +27,7 @@ def get_load_time(shard, a, device):
     """
     b = a[:-1]
     b = [d.to(device) for d in b]
-    shard.model.to(device)
+    shard.model.to(device) # model
     for idx, i in enumerate(b):
         b[idx] = i.cpu()
     for idx, i in enumerate(b):
@@ -45,12 +45,11 @@ class ModelTask():
         self.global_timer = global_timer
         self.name = name
         self.model = model
-        self.forward_shards = []
-        self.backward_shards = []
+        self.forward_shards, self.backward_shards = [], []
         
+        self.remaining_runtime = 0
         self.partitioner = partitioner
-        
-        
+       
         self.lr = lr
         self.total_epochs = epochs
         self.epochs = epochs
@@ -60,11 +59,12 @@ class ModelTask():
         self._old_data = dataloader
         self.dataloader = iter(dataloader)
         self.total_length = len(self._old_data)
+        
         self.queue = []
         self.batches_remaining = len(dataloader)
         self.saved_inter_output = []
         self.gradient = None
-        
+        self.verbose = 0
 
         if (use_scaler):
             self.scaler = torch.cuda.amp.GradScaler()
@@ -85,7 +85,8 @@ class ModelTask():
         self.anticipated_curr_shard_time = 0
         self.setup_complete = False
         self.total_time = 0
-
+        self.new_total_time = 0
+        
     def clear(self):
         del self._old_data
         del self.dataloader
@@ -110,7 +111,6 @@ class ModelTask():
         self.anticipated_curr_shard_time = 0
         
    
-        
     def setup(self, verbose, buffer):
         
         self.forward_shards, self.backward_shards, self.total_time = self.partitioner.shard(
@@ -120,18 +120,15 @@ class ModelTask():
                                                                         self.lr, 
                                                                         verbose
                                                                         )
-        
+        self.verbose = verbose
         self.queue.extend(self.forward_shards)
         self.queue.extend(self.backward_shards)
-        
         start = timer()
         self.dataloader = iter(self._old_data)
         a = next(self.dataloader)
         self.batch_time = timer() - start
         del self.dataloader
         self.dataloader = iter(self._old_data)
-        
-        
         available_gpus = torch.cuda.device_count()
         available_devices = list(range(available_gpus))
         free_spaces = [get_free_space(x) for x in available_devices]
@@ -145,41 +142,37 @@ class ModelTask():
             get_load_time(shard, a, device)
             self.list_of_waste.append(timer() - start)
             shard.model = shard.model.cpu()
-        print(self.list_of_waste)
         
         self.queue_len = len(self.queue)
      
     def setup_timing(self, device):
-        
-        if (next(self.queue[0].model.parameters()).device == torch.device(device)):
-            self.anticipated_curr_shard_time = timer() - self.global_timer + self.queue[0].time_cost
-            self.my_device = device
-        else:
-            self.anticipated_curr_shard_time = timer() - self.global_timer + self.queue[0].time_cost + self.list_of_waste[self.curr_cycle]
-            self.my_device = device
+        self.my_device = device
             
     def get_new_batch(self):
         self.last_runtime = timer()-self.last_mini_time
-        
         try:
             batch_full = next(self.dataloader)
         except StopIteration:
             del self.dataloader
-            
             self.epochs -= 1
             self.dataloader = iter(self._old_data)
             self.batches_remaining = len(self._old_data)
             batch_full = next(self.dataloader)
 
         self.batches_remaining -= 1
-        
+        if (self.new_total_time != 0):
+            self.total_time = self.new_total_time / (self.total_length - self.batches_remaining)
+
+
+
         self.saved_inter_output.append(batch_full[0:len(batch_full)-1])
         self.label = batch_full[-1]
         
         self.curr_cycle = 0
-        
-        
+  
         self.last_mini_time = timer()
+    
+        
     def get_shard(self):
         shard = self.queue.pop(0)
         if (self.epochs > 1 or self.batches_remaining >= 1):

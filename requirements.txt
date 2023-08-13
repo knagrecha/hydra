@@ -1,3 +1,4 @@
 pynvml
 GPUtil
 numpy
+einops

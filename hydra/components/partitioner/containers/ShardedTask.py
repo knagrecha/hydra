@@ -31,6 +31,8 @@ class ShardedTask():
     def __init__(self, model, executor, direction, time_taken, idx, lr, *args):
         self.lr = lr
         self.model = model
+        for param in self.model.parameters():
+            param.pin_memory()
         self.direction = direction
         self.time_cost = time_taken
         self.idx = idx
