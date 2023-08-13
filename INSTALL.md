@@ -14,7 +14,7 @@ The system is verified and tested for: `torch==1.8.1+cu111 torchvision==0.9.1+cu
 ## Download
 ---
 
-At the moment, Hydra is only available through this repository. Run `git clone https://github.com/knagrecha/mptorch`, then cd into the repo. 
+At the moment, Hydra is only available through this repository. Run `git clone https://github.com/knagrecha/hydra`, then cd into the repo. 
 
 Run `pip install -r requirements.txt`, then `pip install .`.
 

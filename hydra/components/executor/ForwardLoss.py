@@ -14,14 +14,16 @@
 from hydra.utilities import delete_batch, move_batch_to_device
 import torch
 
-"""
+
+
+
+class ForwardLoss():
+    """
     Forward pass at the end of the model. Must accept as input
     model, optimizer, data batch, labels, a criterion, the device,
     and scaler (optional).
 
-"""
-
-class ForwardLoss():
+    """
     def __init__(self, idx):
         self.type="Forward Loss"
         self.idx = idx

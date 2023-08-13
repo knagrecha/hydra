@@ -22,6 +22,9 @@ from hydra.components.partitioner import Pilot
 
 
 def get_load_time(shard, a, device):
+    """
+        Assesses model loading time.
+    """
     b = a[:-1]
     b = [d.to(device) for d in b]
     shard.model.to(device)

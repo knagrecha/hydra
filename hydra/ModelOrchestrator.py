@@ -35,6 +35,9 @@ thread_lock = threading.Lock()
 
 
 class ModelOrchestrator():
+    """
+        The core of Saturn. Orchestrates training and parallel execution.
+    """
     def __init__(self, tasks):
         
         #multiprocessing.set_start_method('spawn', force=True)
@@ -64,7 +67,6 @@ class ModelOrchestrator():
     def setup_all_models(self):
         start = timer()
         for task in self.tasks:
-            
             task.setup(self.verbose, self.buffer)
             #print("TASK {} finished setup".format(task.name))
         #print("ALL TASKS SETUP!")

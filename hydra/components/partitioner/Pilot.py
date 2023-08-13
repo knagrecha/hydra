@@ -25,29 +25,41 @@ from hydra.components.executor import Forward, ForwardLoss, Backward
 import math
 
 class Pilot():
+    """
+        Class to execute pilot-run based model sharding.
+    
+    """
+    
     def __init__(self):
         self.selected_device = self.select_device()
         self.type="pilot"
-    """
+    
+        
+
+    def select_device(self):
+        """
         Simply selects the device to run partitioning tests with.
         For heterogeneous settings, use the device with the smallest memory as the
         partitioning tester.
     
-    """
-        
-
-    def select_device(self):
+        """
         gpu_count = torch.cuda.device_count()
         available_devices = list(range(gpu_count))
         free_spaces = [get_free_space(x) for x in available_devices]
-        
-        device_idx = np.argmin(free_spaces)
-        return torch.device("cuda:"+str(device_idx)), device_idx
+        if len(free_spaces) > 0:
+            device_idx = np.argmin(free_spaces)
+            return torch.device("cuda:"+str(device_idx)), device_idx
+        else:
+            print("No GPUs detected on system!")
+            return
     
     
 
     
-    """
+    
+
+    def shard(self, model, criterion, test_batch, double_buffer, lr, verbose):
+        """
         The partitioning function. Takes as input a model along with various
         critical runtime inputs (loss function, sample batch).
         
@@ -56,10 +68,7 @@ class Pilot():
         
         TODO: Change all_layers to use model.modules() instead of model.children()
     
-    """
-
-    def shard(self, model, criterion, test_batch, double_buffer, lr, verbose):
-
+        """
         forward_shards = []
         backward_shards = []
 

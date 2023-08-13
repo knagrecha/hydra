@@ -13,13 +13,14 @@
 
 from hydra.utilities import delete_batch, move_batch_to_device
 import torch
-"""
+
+
+class Forward():
+    """
     Generic Forward pass module. Must take as input the model, device, and batch.
     Returns output batch.
 
-"""
-
-class Forward():
+    """
     def __init__(self, idx):
         self.type="Forward"
         self.idx = idx

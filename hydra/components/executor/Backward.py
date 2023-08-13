@@ -14,13 +14,14 @@
 from hydra.utilities import delete_batch, move_batch_to_device
 import torch
 
-"""
+
+
+class Backward():
+    """
     Generic Backward Pass module. Any back-pass module
     must support these inputs (they can be discarded if unnecessary)
     and return a scaler (can be None), and gradients.
-"""
-
-class Backward():
+    """
     def __init__(self, idx):
         self.type="Backward"
         self.idx = idx
